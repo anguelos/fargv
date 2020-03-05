@@ -20,6 +20,7 @@ params = {
     "anInt": 1,
     "aFloat": 0.1,
     "aBoolean": False,
+    "anotherBoolean": True,
     "aString": "Hello",
     "aStringReference": "{aString} World",
     "anIntWithHelp": [2,"This would be the help"],
@@ -30,6 +31,11 @@ params = {
 * Parse user provided argv to override defaults
 ```python
 new_params, help_str = fargv(params)
+```
+
+* In shell:
+```bash
+my_program -anInt 34 -aFloat=2.3 -aBoolean -anotherBoolean=False
 ```
 
 ## Features:
