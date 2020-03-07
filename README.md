@@ -44,3 +44,15 @@ my_program -anInt 34 -aFloat=2.3 -aBoolean -anotherBoolean=False
 * Params usable as dictionary or struct
 * Can read environmental variables as well
 * macro-parameters
+* fast autocomplete generation
+
+### Autocomplete
+
+Static autocomplete for any program using fargv can be enabled with a single command.
+
+The following command enables autocomplete for fargv_demo.py in the current shell where it is run.
+```bash
+source <(./examples/fargv_demo.py -bash_autocomplete)
+```
+fargv_demo.py should be an executable file employing the shebang (#!/usr/bin/env python3) or something equivalent.
+For a temporary solution, the autocomplete bash code can go in a script in /etc/bash_completion.d or in .bashrc.
