@@ -10,7 +10,7 @@ pip3 pip install --user --upgrade git+https://github.com/anguelos/fargv
 
 Fast argument parser
 
-* Immport
+* Import
 ```python
 from fargv import fargv 
 ```
@@ -56,3 +56,8 @@ source <(./examples/fargv_demo.py -bash_autocomplete)
 ```
 fargv_demo.py should be an executable file employing the shebang (#!/usr/bin/env python3) or something equivalent.
 For a temporary solution, the autocomplete bash code can go in a script in /etc/bash_completion.d or in .bashrc.
+
+### Switch Macros
+
+A switch might be a macro for other switches.
+This allows for example to break many files into a single root switch and all other switches beeing file names relative to that path.
