@@ -86,6 +86,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
 
     new_default_switches = {}
     switches_help = {"help": "Print help and exit.",
+                     "h": "Print help and exit",
                      "bash_autocomplete": "Print a set of bash commands that enable autocomplete for current program."}
 
     for k, v in list(default_switches.items()):
@@ -99,7 +100,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
     default_switches = new_default_switches
     del new_default_switches
 
-    default_switches = dict(default_switches, **{"help": False, "bash_autocomplete": False})
+    default_switches = dict(default_switches, **{"help": False, "bash_autocomplete": False, "h": False})
 
     if argv is None:
         argv = sys.argv
@@ -181,13 +182,14 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
             if isinstance(v, str):
                 argv_switches[k] = v.format(**argv_switches)
 
-    if argv_switches["help"]:
+    if argv_switches["help"] or argv_switches["h"]:
         sys.stderr.write(help_str)
         sys.exit()
     elif argv_switches["bash_autocomplete"]:
         sys.stdout.write(generate_bash_autocomplete(default_switches, sys.argv[0]))
         sys.exit()
     else:
+        del argv_switches["h"]
         del argv_switches["help"]
         del argv_switches["bash_autocomplete"]
 
