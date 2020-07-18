@@ -4,10 +4,17 @@ import sys
 from collections import namedtuple
 
 
+#def update_from_config(filename):
+#    try:
+#        lines = open(filename, "r").read().strip().split("\n")
+#        for line in lines:
+#            key = line[line.find("="):].strip()
+#            value = line[line.find("=") + 1:].strip()
+
 def generate_bash_autocomplete(default_switches, full_filename=None):
     """Creates bash code for autocomplete
 
-    :param default_switches:
+    :param default_switches: a dictionary with the switches definitions
     :param full_filename: The filename of the current program. If None, sys.argv[0] is used.
     :return: A string with bash commands that enable autocomplete
     """
@@ -46,10 +53,13 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
         Booleans: If set with out a parameter, it is switched to True. Other wise a case incensitive value of true or
             false
         Choices: Defined as tuples in the parameter dictionary.
+        Positionals: Defined as sets in the parameter dictionary. They should not contain tabs and a string list will be
+            returned. This type is designed to work well with wildcards.
 
     :param default_switches: A dictionary with parameters as keys and default values as elements. If the value is a
         collection of two elements who's second element is a string.
-    :param argv: a list of strings which contains all parameters in the form '-PARAM_NAME=PARAM_VALUE'
+    :param argv: a list of strings which contains all parameters in the form '-PARAM_NAME=PARAM_VALUE'. This list will
+        be emptied of all switches and their values after processed, if the argv is needed full, pass a copy.
     :param use_enviromental_variables: If set to True, before parsing argv elements to override the default settings,
         the default settings are first overridden by any assigned environmental variable.
     :param return_named_tuple: If set to True, result will be a named tuple instead of a dictionary.
@@ -62,7 +72,8 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
                 int: lambda x: int(x),
                 float: lambda x: float(x),
                 str: lambda x: x,
-                list: lambda x: eval(x)
+                list: lambda x: eval(x),
+                set: lambda x: x.split("\t")  # x will be stiched and than splited
                 }
 
     if use_enviromental_variables:
@@ -78,7 +89,8 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
                      "bash_autocomplete": "Print a set of bash commands that enable autocomplete for current program."}
 
     for k, v in list(default_switches.items()):
-        if (not isinstance(v, str)) and hasattr(v, '__len__') and len(v) == 2 and isinstance(v[1], str):
+        if (not isinstance(v, str)) and not isinstance(v, set) and hasattr(v, '__len__') and len(v) == 2 and \
+                isinstance(v[1], str):
             switches_help[k] = v[1]
             new_default_switches[k] = v[0]
         else:
@@ -91,6 +103,21 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
 
     if argv is None:
         argv = sys.argv
+
+    # Compiling positional switches and their values into tab separated strings
+    for switch_name in [k for k, v in default_switches.items() if isinstance(v, set)]:
+        param_list_start = [arg.split("=")[0] for arg in argv].index(f"-{switch_name}")
+        param_list_end = param_list_start + 1
+        while param_list_end < len(argv) and not argv[param_list_end].startswith("-"):
+            param_list_end += 1
+        if len(argv[param_list_start]) > len(switch_name)+1 and argv[param_list_start][len(switch_name)+1] == "=":
+            items = [argv[param_list_start][len(switch_name)+2]]
+        else:
+            items=[]
+        items += argv[param_list_start + 1: param_list_end]
+        packed_params = '\t'.join(items)
+        packed_params = f"-{switch_name}={packed_params}"
+        argv[param_list_start:param_list_end] = [packed_params]
 
     argv_switches = dict(default_switches)
 

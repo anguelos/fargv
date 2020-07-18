@@ -24,7 +24,8 @@ params = {
     "aString": "Hello",
     "aStringReference": "{aString} World",
     "anIntWithHelp": [2,"This would be the help"],
-    "aChoice": [("choice1","choice2","choice3","choice4"),"And this must be the help"]
+    "aChoice": [("choice1","choice2","choice3","choice4"),"And this must be the help"],
+    "aPositionalSwitch": [set([]), "This is a convenient way to pass colections of things"]
 }
 ```
 
@@ -45,6 +46,7 @@ my_program -anInt 34 -aFloat=2.3 -aBoolean -anotherBoolean=False
 * Can read environmental variables as well
 * macro-parameters
 * fast autocomplete generation
+* Switches with positional values 
 
 ### Autocomplete
 
