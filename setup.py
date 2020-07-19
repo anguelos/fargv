@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 
 setup(
     name='fargv',
-    version='0.1.1',
+    version='0.1.3',
     packages=['fargv'],
     license='MIT',
     author='Anguelos Nicolaou',
@@ -12,10 +12,11 @@ setup(
     description = "A very easy to use argument parser.",
     long_description_content_type="text/markdown",
     long_description=open('README.md').read(),
-    download_url = 'https://github.com/anguelos/fargv/archive/0.1.1.tar.gz',
+    download_url = 'https://github.com/anguelos/fargv/archive/0.1.3.tar.gz',
     keywords = ["argv", "CLI", "argument"],
     classifiers=[
         "Intended Audience :: Science/Research",
+        "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
