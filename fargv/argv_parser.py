@@ -107,18 +107,20 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
 
     # Compiling positional switches and their values into tab separated strings
     for switch_name in [k for k, v in default_switches.items() if isinstance(v, set)]:
-        param_list_start = [arg.split("=")[0] for arg in argv].index(f"-{switch_name}")
-        param_list_end = param_list_start + 1
-        while param_list_end < len(argv) and not argv[param_list_end].startswith("-"):
-            param_list_end += 1
-        if len(argv[param_list_start]) > len(switch_name)+1 and argv[param_list_start][len(switch_name)+1] == "=":
-            items = [argv[param_list_start][len(switch_name)+2]]
-        else:
-            items=[]
-        items += argv[param_list_start + 1: param_list_end]
-        packed_params = '\t'.join(items)
-        packed_params = f"-{switch_name}={packed_params}"
-        argv[param_list_start:param_list_end] = [packed_params]
+        arg_starts = [arg.split("=")[0] for arg in argv]
+        if f"-{switch_name}" in arg_starts:
+            param_list_start = arg_starts.index(f"-{switch_name}")
+            param_list_end = param_list_start + 1
+            while param_list_end < len(argv) and not argv[param_list_end].startswith("-"):
+                param_list_end += 1
+            if len(argv[param_list_start]) > len(switch_name)+1 and argv[param_list_start][len(switch_name)+1] == "=":
+                items = [argv[param_list_start][len(switch_name)+2]]
+            else:
+                items=[]
+            items += argv[param_list_start + 1: param_list_end]
+            packed_params = '\t'.join(items)
+            packed_params = f"-{switch_name}={packed_params}"
+            argv[param_list_start:param_list_end] = [packed_params]
 
     argv_switches = dict(default_switches)
 
