@@ -132,7 +132,9 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
             if "=" in argv[n]:
                 val_str = argv[n][argv[n].find("=") + 1:]
                 if expected_type is tuple:
-                    assert val_str in default_switches[key_str]
+                    if not val_str in default_switches[key_str]:
+                        print(f"{val_str} should be one of {repr(default_switches[key_str])}")
+                        raise ValueError()
             else:
                 if expected_type is bool:
                     argv[n] = "-" + key_str + "=true"
