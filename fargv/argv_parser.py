@@ -2,6 +2,7 @@ import os
 import re
 import sys
 from collections import namedtuple
+from types import SimpleNamespace
 
 
 #def update_from_config(filename):
@@ -42,7 +43,7 @@ complete -F _myscript_tab_complete_{name} {fname}
     return autocomplete_script
 
 
-def fargv(default_switches, argv=None, use_enviromental_variables=True, return_named_tuple=True,
+def fargv(default_switches, argv=None, use_enviromental_variables=True, return_type="SimpleNamespace", return_named_tuple=None,
           spaces_are_equals=True):
     """Parse the argument list and create a dictionary with all parameters.
 
@@ -66,6 +67,13 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
     :param spaces_are_equals: If set to True, a space bar is considered a valid separator if a parameter and its value.
     :return: Dictionary that is the same as the default values with updated values and the help string.
     """
+    if return_named_tuple is not None:
+        sys.stderr.write("fargv.fargv: return return_named_tuple has been deprecated.")
+        if return_named_tuple == True:
+            return_type = "namedtuple"
+        else:
+            return_type = "dict"
+    assert return_type in ["SimpleNamespace", "dict", "namedtuple"]
 
     str2type = {bool: lambda x: x.lower() in ["", "true"],  # TODO(anguelos) replace lambda with a proper function
                 tuple: lambda x: x,
@@ -89,6 +97,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
                      "h": "Print help and exit",
                      "bash_autocomplete": "Print a set of bash commands that enable autocomplete for current program."}
 
+    # Removing help strings from arguments and placing them in stiches_help
     for k, v in list(default_switches.items()):
         if (not isinstance(v, str)) and not isinstance(v, set) and hasattr(v, '__len__') and len(v) == 2 and \
                 isinstance(v[1], str):
@@ -133,7 +142,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
                 val_str = argv[n][argv[n].find("=") + 1:]
                 if expected_type is tuple:
                     if not val_str in default_switches[key_str]:
-                        print(f"{val_str} should be one of {repr(default_switches[key_str])}")
+                        print(f"{val_str} should be one of {repr(default_switches[key_str])}", file=sys.stderr)
                         raise ValueError()
             else:
                 if expected_type is bool:
@@ -197,7 +206,20 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_n
         del argv_switches["help"]
         del argv_switches["bash_autocomplete"]
 
-    if return_named_tuple:
-        argv_switches = namedtuple("Parameters", argv_switches.keys())(*argv_switches.values())
+    # Verifying choice given is part of allowed choices.
+    for key in default_switches.keys():
+        if isinstance(default_switches[key],tuple):
+            if argv_switches[key] not in default_switches[key]:
+                print(f"{key} must be one of [{' '.join([repr(v) for v in default_switches[key]])}], value given: {argv_switches[key]}",file=sys.stderr)
+                raise ValueError
 
-    return argv_switches, help_str
+    if return_type.lower() == "namedtuple":
+        params = namedtuple("Parameters", argv_switches.keys())(*argv_switches.values())
+    elif return_type.lower() == "simplenamespace":
+        params = SimpleNamespace(**argv_switches)
+    elif return_type == "dict":
+        params = argv_switches
+    else:
+        raise ValueError
+
+    return params, help_str
