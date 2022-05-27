@@ -2,15 +2,53 @@ import os
 import re
 import sys
 from collections import namedtuple
-from types import SimpleNamespace
+from typing import Union
+import json
+import types
+import inspect
+import ast
 
 
-#def update_from_config(filename):
-#    try:
-#        lines = open(filename, "r").read().strip().split("\n")
-#        for line in lines:
-#            key = line[line.find("="):].strip()
-#            value = line[line.find("=") + 1:].strip()
+t_fargv_args = Union[types.SimpleNamespace, dict, tuple]
+
+
+def fargv2dict(args: t_fargv_args) -> dict:
+    """Converts any valid type of parsed arguments to dictionaries
+
+    :param args: Either a dictionary, a named tuple, or a SimpleNamespace
+    :return: a dictionary. In case args was a dictionary, it returns a copy of it.
+    """
+    if type(args) == types.SimpleNamespace:
+        return args.__dict__()
+    elif type(args) == dict:
+        return args.copy()
+    elif isinstance(args, tuple):
+        return args._asdict()
+    else:
+        raise NotImplementedError
+
+
+def can_override(standard_args:dict, new_args:dict) -> bool:
+    """Checks weather a given dictionary contains valid values for overriding defined arguments.
+
+    :param standard_args: the dictionary to be overiden
+    :param new_args: the dictionary conatining the overidden argumenst
+    :return: bool
+    """
+    for k, v in new_args.items():
+        if k not in standard_args.keys() or type(v) is not type(standard_args[k]):
+            return False
+    return True
+
+
+def override(standard_args:dict, new_args:dict) -> dict:
+    if can_override(standard_args, new_args):
+        result = standard_args.copy()
+        result.update(new_args)
+        return result
+    else:
+        raise ValueError
+
 
 def generate_bash_autocomplete(default_switches, full_filename=None):
     """Creates bash code for autocomplete
@@ -44,7 +82,7 @@ complete -F _myscript_tab_complete_{name} {fname}
 
 
 def fargv(default_switches, argv=None, use_enviromental_variables=True, return_type="SimpleNamespace", return_named_tuple=None,
-          spaces_are_equals=True):
+          spaces_are_equals=True, description=None):
     """Parse the argument list and create a dictionary with all parameters.
 
     Argument types:
@@ -65,8 +103,19 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         the default settings are first overridden by any assigned environmental variable.
     :param return_named_tuple: If set to True, result will be a named tuple instead of a dictionary.
     :param spaces_are_equals: If set to True, a space bar is considered a valid separator if a parameter and its value.
+    :param description: A string describing the overall function of the script. If None (the default parameter) is passed,
+        the docstring of the calling file will be used if defined.
     :return: Dictionary that is the same as the default values with updated values and the help string.
     """
+    if description is None:
+        caller_filename = inspect.getframeinfo(inspect.currentframe().f_back).filename  #  Assuming the caller is the main script file
+        description = ast.get_docstring(ast.parse(open(caller_filename, "r").read()))
+        if description is None:
+            description = ""
+    
+    if description != "":
+        description = "\n" + description + "\n"
+
     if return_named_tuple is not None:
         sys.stderr.write("fargv.fargv: return return_named_tuple has been deprecated.")
         if return_named_tuple == True:
@@ -168,7 +217,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     argv[:] = positionals
 
     if set(argv_switches.keys()) > set(default_switches.keys()):
-        help_str = "\n" + argv[0] + " Syntax:\n\n"
+        help_str = "\n" + argv[0] + description + " Syntax:\n\n"
         for k in list(default_switches.keys()):
             help_str += f"\t-{k} = {type(default_switches[k])} {switches_help[k]} Default {repr(default_switches[k])}.\n"
         help_str += "\n\nUnrecognized switches: " + repr(tuple(set(default_switches.keys()) - set(argv_switches.keys())))
@@ -181,7 +230,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         if not isinstance(default_switches[k], type(argv_switches[k])):
             argv_switches[k] = str2type[type(default_switches[k])](argv_switches[k])
 
-    help_str = "\n" + argv[0] + " Syntax:\n\n"
+    help_str = "\n" + argv[0] + description + " Syntax:\n\n"
 
     for k in list(default_switches.keys()):
         help_str += "\t-%s=%s %s Default %s . Passed %s\n" % (
@@ -216,7 +265,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     if return_type.lower() == "namedtuple":
         params = namedtuple("Parameters", argv_switches.keys())(*argv_switches.values())
     elif return_type.lower() == "simplenamespace":
-        params = SimpleNamespace(**argv_switches)
+        params = types.SimpleNamespace(**argv_switches)
     elif return_type == "dict":
         params = argv_switches
     else:
