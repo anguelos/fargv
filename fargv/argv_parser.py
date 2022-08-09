@@ -109,7 +109,10 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     """
     if description is None:
         caller_filename = inspect.getframeinfo(inspect.currentframe().f_back).filename  #  Assuming the caller is the main script file
-        description = ast.get_docstring(ast.parse(open(caller_filename, "r").read()))
+        try:
+            description = ast.get_docstring(ast.parse(open(caller_filename, "r").read()))
+        except:
+            description = ""  # fails in windows binary files
         if description is None:
             description = ""
     
