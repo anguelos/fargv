@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 
 setup(
     name='fargv',
-    version='0.1.8',
+    version='0.1.8b',
     packages=['fargv'],
     license='MIT',
     author='Anguelos Nicolaou',
