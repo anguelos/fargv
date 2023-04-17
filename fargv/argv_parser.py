@@ -7,6 +7,7 @@ import json
 import types
 import inspect
 import ast
+from .util import set_verbosity
 
 
 t_fargv_args = Union[types.SimpleNamespace, dict, tuple]
@@ -81,6 +82,33 @@ complete -F _myscript_tab_complete_{name} {fname}
     return autocomplete_script
 
 
+def fargv_dict(default_switches, argv=None, use_enviromental_variables=True, return_named_tuple=None,
+          spaces_are_equals=True, description=None):
+    """Parse the argument list and create a dictionary with all parameters.
+
+    Argument types:
+        Strings: The most generic parameter type. If you need more specific data types, you run eval on a string type.
+        Integers: Anything that can be used to construct an int from a string.
+        Floating Point: Anything that can be used to construct a float from a string.
+        Booleans: If set with out a parameter, it is switched to True. Other wise a case incensitive value of true or
+            false
+        Choices: Defined as tuples in the parameter dictionary.
+        Positionals: Defined as sets in the parameter dictionary. They should not contain tabs and a string list will be
+            returned. This type is designed to work well with wildcards.
+
+    :param default_switches: A dictionary with parameters as keys and default values as elements. If the value is a
+        collection of two elements who's second element is a string.
+    :param argv: a list of strings which contains all parameters in the form '-PARAM_NAME=PARAM_VALUE'. This list will
+        be emptied of all switches and their values after processed, if the argv is needed full, pass a copy.
+    :param use_enviromental_variables: If set to True, before parsing argv elements to override the default settings,
+        the default settings are first overridden by any assigned environmental variable.    :param spaces_are_equals: If set to True, a space bar is considered a valid separator if a parameter and its value.
+    :param description: A string describing the overall function of the script. If None (the default parameter) is passed,
+        the docstring of the calling file will be used if defined.
+    :return: Dictionary that is the same as the default values with updated values and the help string.
+    """
+    return fargv(return_type="SimpleNamespace",default_switches=default_switches, argv=None,use_enviromental_variables=use_enviromental_variables,return_named_tuple=return_named_tuple, spaces_are_equals=spaces_are_equals, description=description)
+
+
 def fargv(default_switches, argv=None, use_enviromental_variables=True, return_type="SimpleNamespace", return_named_tuple=None,
           spaces_are_equals=True, description=None):
     """Parse the argument list and create a dictionary with all parameters.
@@ -147,6 +175,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     new_default_switches = {}
     switches_help = {"help": "Print help and exit.",
                      "h": "Print help and exit",
+                     "v": "Set verbosity level.",
                      "bash_autocomplete": "Print a set of bash commands that enable autocomplete for current program."}
 
     # Removing help strings from arguments and placing them in stiches_help
@@ -161,7 +190,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     default_switches = new_default_switches
     del new_default_switches
 
-    default_switches = dict(default_switches, **{"help": False, "bash_autocomplete": False, "h": False})
+    default_switches = dict(default_switches, **{"help": False, "bash_autocomplete": False, "h": False, "v": 1})
 
     if argv is None:
         argv = sys.argv
@@ -257,6 +286,8 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         del argv_switches["h"]
         del argv_switches["help"]
         del argv_switches["bash_autocomplete"]
+        set_verbosity(argv_switches["v"])
+        del argv_switches["v"]
 
     # Verifying choice given is part of allowed choices.
     for key in default_switches.keys():
@@ -273,5 +304,6 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         params = argv_switches
     else:
         raise ValueError
+
 
     return params, help_str
