@@ -142,8 +142,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         except:
             description = ""  # fails in windows binary files
         if description is None:
-            description = ""
-    
+            description = ""    
     if description != "":
         description = "\n" + description + "\n"
 
@@ -304,6 +303,4 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
         params = argv_switches
     else:
         raise ValueError
-
-
     return params, help_str
