@@ -1,6 +1,7 @@
 import sys
 from .fargv_param_value import ParamDefinition, create_from_definition_data
 
+
 class FargvNameException(Exception):
     pass
 
@@ -15,7 +16,7 @@ class Name:
     def __init__(self, name_variants):
         print(f"3NameConstr({repr(name_variants)})")
         if isinstance(name_variants, Name):
-            self.__name_variants = tuple([n for n in name_variants.__name_variants])
+            self._name_variants = tuple([n for n in name_variants._name_variants])
         else:
             if isinstance(name_variants, str):
                 name_variants = tuple([name_variants])
@@ -28,37 +29,37 @@ class Name:
                 assert all([all(ord(c) < 128 for c in name) for name in name_variants])
                 assert len(set(name_variants)) == len(name_variants)
             except AssertionError:
-                print(f"NV {repr(name_variants)}, {type(name_variants)}")
                 exc_type, exc_obj, exc_tb = sys.exc_info()
+                self._name_variants = ("ErrorNoNameSet!",)  # needed for the exception to be raised and __repr__ to work
                 raise FargvNameException(f"Invalid name variants'{name_variants}'")
-            self.__name_variants = tuple([name_variants[0]]) + tuple(sorted(name_variants[1:]))
+            self._name_variants = tuple([name_variants[0]]) + tuple(sorted(name_variants[1:]))
 
     def get_main_name(self):
-        return self.__name_variants[0]
+        return self._name_variants[0]
 
     def get_short_names(self):
-        return tuple([name for name in self.__name_variants if len(name) == 1 and name.isalpha()])
+        return tuple([name for name in self._name_variants if len(name) == 1 and name.isalpha()])
 
     def get_name_variants(self):
-        return self.__name_variants
+        return self._name_variants
 
     def append_name_variant(self, name_variant):
         assert isinstance(name_variant, str)
         assert name_variant.isidentifier()
         assert len(name_variant) == 1 and name_variant.isalpha() or len(name_variant) > 1
-        self.__name_variants += (name_variant,)
+        self._name_variants += (name_variant,)
 
     def __str__(self):
-        return f"{self.__name_variants[0]}"
+        return f"{self._name_variants[0]}"
 
     def __repr__(self):
         return f"{self.get_name_variants()}"
     
     def __hash__(self) -> int:
-        return hash(self.__name_variants)
+        return hash(self._name_variants)
 
     def get_caption(self):
-        words = self.__name_variants[0].split("_")
+        words = self._name_variants[0].split("_")
         return " ".join([word.capitalize() for word in words])
 
     def get_cli_help_string(self, separator="-"):
@@ -89,7 +90,7 @@ class Registry:
         if data is None:
             pass
         elif isinstance(data, dict):
-            self.define_from_dict(data)
+            self._define_from_dict(data)
         else:
             raise ValueError(f"Registry(data) Invalid data type '{type(data)}'")
     
@@ -97,7 +98,6 @@ class Registry:
         name = Name(name)
         if any(n in self.__all_names for n in name.get_name_variants()):
             raise FargvDuplicateNameException
-        print(f"4Insert({name}, {param})")
         param = create_from_definition_data(param)
         param.register_param(self)
         self.__names_definitions.append((name, param))  # Renamed from __names_definitions_objects
@@ -174,14 +174,14 @@ class Registry:
 
     def values_allowed(self, name2value):
         for name, value in name2value.items():
-            if not self.__names_definitions[self.__all_names[name]][2].value_allowed(value):
+            if not self.__names_definitions[self.__all_names[name]][1].value_allowed(value):
                 return False
         return True
 
     def update_values(self, name2value):
         if self.values_allowed(name2value):
             for name, value in name2value.items():
-                self.__names_definitions[self.__all_names[name]][2].update_value(value)
+                self.__names_definitions[self.__all_names[name]][1].update_value(value)
         else:
             raise ValueError("Invalid value")
 
@@ -191,7 +191,7 @@ class Registry:
             res.insert(name.get_name_variants(), param.copy().register_param(self))
         return res
 
-    def define_from_dict(self, args_dict):
+    def _define_from_dict(self, args_dict):
         print("args_dict", args_dict)
         for name, definition_data in args_dict.items():
             if isinstance(definition_data, dict):

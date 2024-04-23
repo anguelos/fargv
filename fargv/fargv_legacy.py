@@ -270,10 +270,17 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
 
     # replace {blabla} with argv_switches["balbla"] values
     # replacable_values = ["{" + k + "}" for k in list(argv_switches.keys())]
-    while len(re.findall("{[a-z0-9A-Z_]+}", "".join([v for v in list(argv_switches.values()) if isinstance(v, str)]))):
+    # TODO (anguelos) detect cycles properly
+    counter = 0
+    MAX_REF = 10
+    while counter < MAX_REF and len(re.findall("{[a-z0-9A-Z_]+}", "".join([v for v in list(argv_switches.values()) if isinstance(v, str)]))):
+        counter += 1
         for k, v in list(argv_switches.items()):
             if isinstance(v, str):
                 argv_switches[k] = v.format(**argv_switches)
+
+    if counter >= MAX_REF:
+        raise ValueError("Fargv cyclic reference error.")
 
     if argv_switches["help"] or argv_switches["h"]:
         sys.stderr.write(help_str)

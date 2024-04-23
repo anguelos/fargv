@@ -47,7 +47,7 @@ def create_from_definition_data(definition_data, description=None):
         return Choice(definition_data)
     elif isinstance(definition_data, list):
         if len(definition_data) == 2:
-            return ParamDefinition.create_from_definition_data(definition_data[0], description=definition_data[1])
+            return create_from_definition_data(definition_data[0], description=definition_data[1])
     elif isinstance(definition_data, ParamDefinition):
         return definition_data.copy()
     else:
