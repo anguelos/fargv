@@ -1,3 +1,7 @@
+.pypi_token
+.trunk/
+
+
 # Editors
 .vscode/
 .idea/
