@@ -29,3 +29,4 @@ def warn(msg, verbose=1, file=sys.stderr, end="\n", put_timestamp=False):
         else:
             timestamp = ""
         print(f"{timestamp}{msg}", file=file, end=end)
+
