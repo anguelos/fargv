@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(python:*)",
+      "Bash(make test:*)",
+      "Bash(make unittest:*)",
+      "Bash(make htmldoc:*)"
+    ]
+  }
+}

@@ -22,5 +22,5 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering"],
     install_requires=[],
-    extras_require=[],
+    extras_require={},
 )

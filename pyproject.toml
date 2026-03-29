@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.coverage.run]
+source = ["fargv"]
+[tool.coverage.report]
+exclude_lines = [
+    "def main_",
+    "pragma: no cover",
+]
