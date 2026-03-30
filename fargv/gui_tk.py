@@ -376,3 +376,43 @@ def show(parser, title="fargv"):
     _resize_window()
     root.mainloop()
     return result["ok"]
+
+
+# ─────────────────────────────────────────── show_namespace ──────────────────
+
+def show_namespace(namespace, title="fargv"):
+    """Open the Tk dialog for a :class:`~fargv.namespace.FargvNamespace`.
+
+    Behaves like :func:`show` but writes changed values back to *namespace*
+    via attribute assignment so that all linked backends are notified.
+
+    :param namespace: A :class:`~fargv.namespace.FargvNamespace` instance.
+    :param title:     Window title.
+    :returns: ``True`` if Run was clicked, ``False`` if Aborted.
+    """
+    params = object.__getattribute__(namespace, "_params")
+    before = {k: p.value for k, p in params.items()}
+
+    class _Adapter:
+        """Makes FargvNamespace._params look like an ArgumentParser."""
+        _name2parameters = params
+        name = title
+
+        def generate_help_message(self, colored=None):
+            lines = [f"Usage: {title} [OPTIONS]", ""]
+            for param in params.values():
+                lines.append(param.docstring(colored=colored))
+            return "\n".join(lines)
+
+        def infer_short_names(self):
+            pass
+
+    ok = show(_Adapter(), title=title)
+
+    if ok:
+        # Apply changed values via __setattr__ to trigger backend notifications.
+        for name, param in params.items():
+            if param.value != before.get(name):
+                namespace._notify(name, param.value)
+
+    return ok

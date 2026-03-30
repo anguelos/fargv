@@ -19,7 +19,7 @@ By default :func:`parse` returns a :class:`types.SimpleNamespace`.  Pass
 import sys
 import types
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypeVar, Union, overload
 
 from .parameters import (
     FargvError, FargvBoolHelp,
@@ -30,6 +30,8 @@ from .parser import ArgumentParser
 from .type_detection import definition_to_parser
 from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path
 
+
+_DC = TypeVar("_DC")   # used in @overload signatures for dataclass definitions
 
 _AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure", "user_interface"}
 
@@ -194,7 +196,7 @@ def _wrap(raw: Dict[str, Any], return_type: str):
         return raw
     if return_type == "namedtuple":
         return namedtuple("Parameters", raw.keys())(*raw.values())
-    raise ValueError(f"return_type must be 'SimpleNamespace', 'dict', or 'namedtuple'")
+    raise ValueError(f"return_type must be 'SimpleNamespace', 'dict', 'namedtuple', or 'namespace'")
 
 
 def _validate_override_order(order):
@@ -222,6 +224,23 @@ def _validate_override_order(order):
         )
 
 
+@overload
+def parse(
+    definition: "type[_DC]",
+    given_parameters: "Optional[Union[Dict[str, Any], List[str]]]" = ...,
+    **kwargs: Any,
+) -> "Tuple[_DC, str]": ...
+
+
+@overload
+def parse(
+    definition: "Union[Dict[str, Any], ArgumentParser, Callable]",
+    given_parameters: "Optional[Union[Dict[str, Any], List[str]]]" = ...,
+    **kwargs: Any,
+) -> "Tuple[Any, str]": ...
+
+
+
 def parse(
     definition: Union[Dict[str, Any], ArgumentParser, Callable],
     given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
@@ -235,7 +254,7 @@ def parse(
     auto_define_config: bool = True,
     auto_define_user_interface: bool = True,
     colored_help: Optional[bool] = None,
-    return_type: Literal["SimpleNamespace", "dict", "namedtuple"] = "SimpleNamespace",
+    return_type: Literal["SimpleNamespace", "dict", "namedtuple", "namespace"] = "SimpleNamespace",
     subcommand_return_type: Literal["flat", "nested", "tuple"] = "flat",
     non_defaults_are_mandatory: bool = False,
     fn_def_tolerate_wildcards: bool = False,
@@ -286,6 +305,9 @@ def parse(
     # 0. Validate override order
     _validate_override_order(override_order)
 
+    import dataclasses as _dc
+    _dc_cls = definition if (_dc.is_dataclass(definition) and isinstance(definition, type)) else None
+
     # 1. Resolve UI
     resolved_ui = ui if ui is not None else ("jupyter" if _is_jupyter() else "cli")
 
@@ -332,6 +354,11 @@ def parse(
         raw = {n: p.value for n, p in parser._name2parameters.items()}
         raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
         result_raw = {k: v for k, v in raw.items() if k not in _AUTO_PARAMS}
+        if _dc_cls is not None:
+            return _dc_cls(**result_raw), help_str
+        if return_type == "namespace":
+            from .namespace import FargvNamespace
+            return FargvNamespace({k: parser._name2parameters[k] for k in result_raw}), help_str
         return _wrap(result_raw, return_type), help_str
 
     argv = sys.argv if given_parameters is None else list(given_parameters)
@@ -377,4 +404,9 @@ def parse(
 
     raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
     result_raw = {k: v for k, v in raw.items() if k not in _AUTO_PARAMS}
+    if _dc_cls is not None:
+        return _dc_cls(**result_raw), help_str
+    if return_type == "namespace":
+        from .namespace import FargvNamespace
+        return FargvNamespace({k: parser._name2parameters[k] for k in result_raw}), help_str
     return _wrap(result_raw, return_type), help_str

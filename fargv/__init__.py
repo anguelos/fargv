@@ -19,6 +19,7 @@ import sys
 from .version import __version__
 from .fargv_legacy import fargv
 from .parse import parse
+from .namespace import FargvNamespace, FargvBackend, FargvConfigBackend, FargvTkBackend
 from .parameters import (
     FargvError, FargvParameter, REQUIRED,
     FargvInt, FargvFloat, FargvBool, FargvBoolHelp,
@@ -37,6 +38,7 @@ __all__ = [
     "FargvInt", "FargvFloat", "FargvBool", "FargvBoolHelp",
     "FargvHelp", "FargvVerbosity", "FargvBashAutocomplete", "FargvConfig", "FargvAutoConfig",
     "FargvUserInterface",
+    "FargvNamespace", "FargvBackend", "FargvConfigBackend", "FargvTkBackend",
     "FargvStr", "FargvChoice", "FargvPositional",
     "FargvStream", "FargvInputStream", "FargvOutputStream",
     "FargvPath", "FargvExistingFile", "FargvNonExistingFile", "FargvFile",
