@@ -53,15 +53,18 @@ class FargvInt(FargvParameter):
         if self.is_count_switch:
             if len(values) == 0:
                 self._value = (self._value if self._value is not None else 0) + 1
+                self.on_value_set(self._value)
                 return []
             # Accept an explicit integer value (-v=3 or --verbosity 3);
             # if the next token is not an integer, treat it as a positional
             # leftover and just increment the counter.
             try:
                 self._value = int(values[0])
+                self.on_value_set(self._value)
                 return list(values[1:])
             except (ValueError, TypeError):
                 self._value = (self._value if self._value is not None else 0) + 1
+                self.on_value_set(self._value)
                 return list(values)
         return super().ingest_value_strings(*values)
 
@@ -144,12 +147,15 @@ class FargvBool(FargvParameter):
         """
         if isinstance(val, bool):
             self._value = val
+            self.on_value_set(self._value)
             return val
         if isinstance(val, int):
             self._value = bool(val)
+            self.on_value_set(self._value)
             return self._value
         if isinstance(val, str):
             self._value = val.lower() in ("1", "t", "true")
+            self.on_value_set(self._value)
             return self._value
         raise FargvError(f"Cannot evaluate {val!r} as bool for '{self._name}'")
 
@@ -162,9 +168,11 @@ class FargvBool(FargvParameter):
         """
         if len(values) == 0:
             self._value = not self._default
+            self.on_value_set(self._value)
             return []
         elif values[0].lower() in ["1", "0", "t", "f", "true", "false"]:
             self._value = values[0].lower() in ["1", "t", "true"]
+            self.on_value_set(self._value)
             return list(values[1:])
         else:
             raise FargvError(

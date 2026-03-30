@@ -21,10 +21,13 @@ import types
 from collections import namedtuple
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
-from .parameters import FargvError, FargvBoolHelp, FargvBool, FargvInt, FargvStr, REQUIRED
+from .parameters import (
+    FargvError, FargvBoolHelp,
+    FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig,
+)
 from .parser import ArgumentParser
 from .type_detection import definition_to_parser
-from .config import default_config_path, load_config, apply_config, dump_config, scan_config_path
+from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path
 
 
 _AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure"}
@@ -51,34 +54,40 @@ def _warn_auto_conflicts(parser, auto_help, auto_bash_autocomplete,
             )
 
 
+_GENERIC_PROG_NAMES = {
+    "fargv", "__main__", "__main__.py", "-c", "-m", "-", "",
+}
+
+
+def _has_proper_program_name(parser) -> bool:
+    """Return True when the parser's program name looks like a real application name.
+
+    Names that are interpreter artefacts (``__main__``, ``-c``, …) or the
+    fargv fallback (``"fargv"``) are considered improper — config-file
+    auto-params are meaningless without a stable application identity.
+    """
+    import os
+    name = getattr(parser, "name", "") or ""
+    stem = os.path.splitext(os.path.basename(name))[0]
+    return stem not in _GENERIC_PROG_NAMES and not stem.startswith("_")
+
+
 def _add_auto_params(parser, auto_help, auto_bash_autocomplete,
                      auto_define_verbosity, auto_define_config):
     if auto_help and "help" not in parser._name2parameters:
-        parser._add_parameter(FargvBoolHelp(parser))
+        parser._add_parameter(FargvHelp(parser))
     if auto_define_verbosity and "verbosity" not in parser._name2parameters:
-        parser._add_parameter(
-            FargvInt(0, name="verbosity", short_name="v",
-                     description="Verbosity level", is_count_switch=True)
-        )
+        parser._add_parameter(FargvVerbosity())
     if auto_bash_autocomplete and "bash_autocomplete" not in parser._name2parameters:
-        parser._add_parameter(
-            FargvBool(False, name="bash_autocomplete",
-                      description="Print bash autocomplete script and exit")
-        )
-    if auto_define_config:
+        parser._add_parameter(FargvBashAutocomplete(parser))
+    if auto_define_config and _has_proper_program_name(parser):
         if "config" not in parser._name2parameters:
             cfg_default = str(default_config_path(
                 getattr(parser, "name", "fargv")
             ))
-            parser._add_parameter(
-                FargvStr(cfg_default, name="config",
-                         description="Path to JSON config file (overrides defaults)")
-            )
+            parser._add_parameter(FargvConfig(cfg_default, param_parser=parser, exclude=_AUTO_PARAMS))
         if "auto_configure" not in parser._name2parameters:
-            parser._add_parameter(
-                FargvBool(False, name="auto_configure",
-                          description="Print current config as JSON to stdout and exit")
-            )
+            parser._add_parameter(FargvAutoConfig(parser, exclude=_AUTO_PARAMS))
 
 
 def _reshape_subcommands(raw: Dict[str, Any], subcommand_return_type: str, return_type: str):
@@ -122,6 +131,31 @@ def _wrap(raw: Dict[str, Any], return_type: str):
     raise ValueError(f"return_type must be 'SimpleNamespace', 'dict', or 'namedtuple'")
 
 
+def _validate_override_order(order):
+    """Validate the override_order argument.
+
+    :raises ValueError: When *order* does not start with ``"default"``, does not
+        end with ``"ui"``, or contains duplicate entries.
+    """
+    if order[0] != "default":
+        raise ValueError(
+            f"override_order must start with 'default', got {order[0]!r}"
+        )
+    if order[-1] != "ui":
+        raise ValueError(
+            f"override_order must end with 'ui', got {order[-1]!r}"
+        )
+    if len(order) != len(set(order)):
+        seen, dups = set(), []
+        for item in order:
+            if item in seen:
+                dups.append(item)
+            seen.add(item)
+        raise ValueError(
+            f"override_order contains duplicate entries: {dups}"
+        )
+
+
 def parse(
     definition: Union[Dict[str, Any], ArgumentParser, Callable],
     given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
@@ -138,6 +172,7 @@ def parse(
     subcommand_return_type: Literal["flat", "nested", "tuple"] = "flat",
     non_defaults_are_mandatory: bool = False,
     fn_def_tolerate_wildcards: bool = False,
+    override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
 ) -> Tuple[Any, str]:
     """Parse CLI arguments using the new OO interface.
 
@@ -169,12 +204,21 @@ def parse(
         Inject ``--config <path>`` and ``--auto_configure`` parameters.
         Default config path: ``~/.{app_name}.config.json``.
 
+    override_order:
+        Controls which source takes precedence.  Each subsequent source
+        overrides earlier ones.  Must start with ``"default"`` and end
+        with ``"ui"``; duplicates are rejected.
+        Default: ``["default", "config", "envvar", "ui"]``.
+
     subcommand_return_type:
         "flat" (default) — subcommand params merged into top-level namespace,
         subcommand key holds the selected name.
         "nested" — subcommand key holds a SimpleNamespace(name=..., **params).
         "tuple"  — returns ((name, sub_ns, parent_ns), help_str).
     """
+    # 0. Validate override order
+    _validate_override_order(override_order)
+
     # 1. Resolve UI
     resolved_ui = ui if ui is not None else ("jupyter" if _is_jupyter() else "cli")
     if resolved_ui != "cli":
@@ -207,7 +251,8 @@ def parse(
                      auto_define_verbosity, auto_define_config)
     parser.allow_default_positional = allow_implied_positionals
 
-    # 4. Pre-build help string
+    # 4. Infer short names, then pre-build help string
+    parser.infer_short_names()
     help_str = parser.generate_help_message(colored=colored_help)
 
     # 5. Dict shortcut (bypass CLI)
@@ -226,40 +271,25 @@ def parse(
 
     argv = sys.argv if given_parameters is None else list(given_parameters)
 
-    # 6. Apply config file (defaults → config → CLI)
-    if auto_define_config:
-        raw_config_path = scan_config_path(argv[1:] if argv else [], long_prefix)
-        if raw_config_path is None:
-            # Use the default path from the --config param default
-            raw_config_path = parser._name2parameters.get("config", None)
-            raw_config_path = raw_config_path._value if raw_config_path else None
-        cfg = load_config(raw_config_path)
-        # Exclude auto-params themselves from config application
-        user_params = {k: v for k, v in parser._name2parameters.items()
-                       if k not in _AUTO_PARAMS}
-        apply_config(user_params, cfg, raw_config_path)
+    # 6. Apply intermediate override sources in the requested order
+    user_params = {k: v for k, v in parser._name2parameters.items()
+                   if k not in _AUTO_PARAMS}
+    for _source in override_order[1:-1]:   # skip 'default' and 'ui'
+        if _source == "config" and "config" in parser._name2parameters:
+            raw_config_path = scan_config_path(argv[1:] if argv else [], long_prefix)
+            if raw_config_path is None:
+                raw_config_path = parser._name2parameters.get("config", None)
+                raw_config_path = raw_config_path._value if raw_config_path else None
+            cfg = load_config(raw_config_path)
+            apply_config(user_params, cfg, raw_config_path)
+        elif _source == "envvar":
+            apply_env_vars(user_params, getattr(parser, 'name', 'fargv'))
 
     # 7. Full CLI parse
     raw = parser.parse(argv, first_is_name=True,
                        tolerate_unassigned_arguments=tolerate_unassigned_arguments)
 
-    # 8. Handle bash_autocomplete
-    if raw.get("bash_autocomplete"):
-        sys.stdout.write(parser.generate_bash_autocomplete())
-        sys.exit(0)
-
-    # 9. Handle auto_configure
-    if raw.get("auto_configure"):
-        sys.stdout.write(dump_config(parser, exclude=_AUTO_PARAMS))
-        sys.stdout.write("\n")
-        sys.exit(0)
-
-    # 10. Apply verbosity
-    if "verbosity" in raw:
-        from .util import set_verbosity
-        set_verbosity(raw["verbosity"])
-
-    # 11. Reshape subcommands
+    # 8. Reshape subcommands
     sub_items = {k: v for k, v in raw.items()
                  if isinstance(v, dict) and "name" in v and "result" in v}
     if sub_items and subcommand_return_type == "tuple":

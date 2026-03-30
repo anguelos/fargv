@@ -9,7 +9,10 @@ Type hierarchy
 ├── :class:`FargvInt`          — integer; optionally a repeatable count switch
 ├── :class:`FargvFloat`        — floating-point
 ├── :class:`FargvBool`         — boolean flag
-│   └── :class:`FargvBoolHelp` — prints help and exits
+│   ├── :class:`FargvBoolHelp` — prints help and exits (legacy)
+│   ├── :class:`FargvHelp`     — prints help and exits (uses on_value_set)
+│   ├── :class:`FargvBashAutocomplete` — prints autocomplete and exits
+│   └── :class:`FargvAutoConfig`        — dumps config JSON and exits
 ├── :class:`FargvStr`          — string with ``{key}`` interpolation
 ├── :class:`FargvChoice`       — enum-style choice from a fixed list
 ├── :class:`FargvPositional`   — ordered list of positional tokens
@@ -25,6 +28,7 @@ Type hierarchy
 """
 from .base import FargvError, FargvParameter, REQUIRED
 from .scalars import FargvInt, FargvFloat, FargvBool, FargvBoolHelp
+from .auto_params import FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig
 from .string import FargvStr
 from .collection import FargvChoice, FargvPositional, FargvPostional
 from .stream import FargvStream, FargvInputStream, FargvOutputStream

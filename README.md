@@ -87,6 +87,41 @@ p, _ = fargv.fargv({
 count=42 python myscript.py   # overrides the default for 'count'
 ```
 
+## Comparison with other argument parsers
+
+| Feature | fargv | argparse | click | typer | fire | docopt |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Zero boilerplate | ✅ | ❌ | 🟡 | 🟡 | ✅ | 🟡 |
+| Type inference from defaults | ✅ | ❌ | ❌ | ❌ | 🟡 | ❌ |
+| Type inference from annotations | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Auto-generated help | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Auto short-name inference | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Config file (built-in) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| String interpolation | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Subcommands | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
+| `python -m pkg.func` invocation | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Bash tab completion | ✅ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| No runtime dependencies | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Environment variable override | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| Mutually exclusive parameters | ❌ | ✅ | ✅ | ✅ | ❌ | 🟡 |
+| Parameter validation / constraints | ❌ | 🟡 | ✅ | ✅ | ❌ | ❌ |
+| GUI / Jupyter widgets | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+✅ built-in  · 🟡 available with extra work or plugins  · ❌ not supported
+
+## Using fargv from bash
+
+`python -m fargv` lets you call any Python callable directly from the shell —
+types and defaults are inferred from the function signature automatically.
+
+```bash
+python -m fargv numpy.linspace --help
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
+```
+
+![fargv bash demo](docs/_static/fargv_bash.png)
+
 ## License
 
 MIT

@@ -21,6 +21,7 @@ from .parse import parse
 from .parameters import (
     FargvError, FargvParameter, REQUIRED,
     FargvInt, FargvFloat, FargvBool, FargvBoolHelp,
+    FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig,
     FargvStr, FargvChoice, FargvPositional,
     FargvStream, FargvInputStream, FargvOutputStream,
     FargvPath, FargvExistingFile, FargvNonExistingFile, FargvFile,
@@ -32,6 +33,7 @@ __all__ = [
     "fargv", "parse",
     "FargvError", "FargvParameter", "REQUIRED",
     "FargvInt", "FargvFloat", "FargvBool", "FargvBoolHelp",
+    "FargvHelp", "FargvVerbosity", "FargvBashAutocomplete", "FargvConfig", "FargvAutoConfig",
     "FargvStr", "FargvChoice", "FargvPositional",
     "FargvStream", "FargvInputStream", "FargvOutputStream",
     "FargvPath", "FargvExistingFile", "FargvNonExistingFile", "FargvFile",

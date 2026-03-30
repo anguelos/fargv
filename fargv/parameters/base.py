@@ -76,6 +76,7 @@ class FargvParameter(ABC):
         self._mandatory   = default is REQUIRED
         self._default     = None if self._mandatory else default
         self._value       = None if self._mandatory else default
+        self._env_var_name: Optional[str] = None
 
     def set_name(self, name: str):
         """Set the parameter's long name after construction.
@@ -157,6 +158,18 @@ class FargvParameter(ABC):
         """
         return " ".join(word.capitalize() for word in self._name.split("_"))
 
+    def on_value_set(self, value) -> None:
+        """Called immediately after this parameter's value is stored.
+
+        Override in subclasses to attach side-effects (e.g. print help and
+        exit, update a verbosity counter, trigger validation).  The default
+        implementation is a no-op.
+
+        :param value: The newly stored value (already converted to the
+                      parameter's native type).
+        """
+        pass
+
     @property
     def short_name(self) -> str:
         """Single-character short alias, or ``None`` if not set."""
@@ -204,7 +217,9 @@ class FargvParameter(ABC):
         else:
             default_str = green(repr(self._default), colored=c)
         desc_str = self._description if self._description is not None else ""
-        return f"  {name_str}{short_str} {type_str}  {desc_str}  [default: {default_str}]"
+        env_str  = (f"  [env: {self._env_var_name}]"
+                    if self._env_var_name is not None else "")
+        return f"  {name_str}{short_str} {type_str}  {desc_str}  [default: {default_str}]{env_str}"
 
     # ── Parsing ────────────────────────────────────────────────────────────
 
@@ -240,6 +255,7 @@ class FargvParameter(ABC):
         target = self._get_class_type()
         if isinstance(val, target):
             self._value = target(val)
+            self.on_value_set(self._value)
             return self._value
         self.ingest_value_strings(str(val))
         return self._value
@@ -258,4 +274,5 @@ class FargvParameter(ABC):
         if len(values) < 1:
             raise FargvError(f"Parameter '{self._name}' requires a value")
         self._value = self._get_class_type()(values[0])
+        self.on_value_set(self._value)
         return list(values[1:])

@@ -1,7 +1,7 @@
 """Config-file support for fargv.
 
 Priority order applied by fargv.parse():
-    coded defaults  →  config file  →  env vars (TODO)  →  CLI / UI
+    coded defaults  →  config file  →  env vars  →  CLI / UI
 """
 import json
 import os
@@ -28,10 +28,10 @@ def load_config(path: Optional[Path]) -> Dict[str, Any]:
     Returns an empty dict when *path* is None or the file does not exist.
     Raises a ValueError on JSON parse errors.
     """
-    if path is None:
+    if not path:
         return {}
     path = Path(path)
-    if not path.exists():
+    if not path.exists() or not path.is_file():
         return {}
     try:
         with open(path) as fh:
@@ -65,6 +65,33 @@ def apply_config(
         )
     for key, val in config.items():
         name2parameters[key].evaluate(val)
+
+
+
+def apply_env_vars(
+    name2parameters: Dict[str, Any],
+    progname: str,
+) -> None:
+    """Apply environment variable overrides to parser parameters.
+
+    For each parameter the expected env var name is
+    ``{APPNAME}_{PARAMNAME}`` (both uppercased, non-alphanumeric characters
+    in *progname* replaced by ``_``).  For example, a script called
+    ``train.py`` with a ``--lr`` parameter reads ``TRAIN_LR``.
+
+    The env var name is also stamped onto the parameter as
+    ``param._env_var_name`` so that :meth:`~fargv.parameters.base.FargvParameter.docstring`
+    can display it in help output.
+
+    :param name2parameters: ``{name: FargvParameter}`` mapping (auto-params excluded).
+    :param progname:         The application name (typically ``parser.name``).
+    """
+    prefix = _app_name(progname).upper() + "_"
+    for pname, param in name2parameters.items():
+        env_key = prefix + pname.upper()
+        param._env_var_name = env_key          # stamp for help display
+        if env_key in os.environ:
+            param.evaluate(os.environ[env_key])
 
 
 def dump_config(parser, exclude=None) -> str:

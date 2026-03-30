@@ -116,6 +116,46 @@ class ArgumentParser:
                 raise FargvError(f"Duplicate parameter short name '{parameter.short_name}'")
             self._shortname2parameters[parameter.short_name] = parameter
 
+    def infer_short_names(self) -> None:
+        """Assign short single-character aliases to parameters that lack one.
+
+        Only parameters whose :attr:`~fargv.parameters.base.FargvParameter.short_name`
+        is currently ``None`` are considered.  The algorithm iterates over
+        letter positions ``[0, 1, 2, ...]`` and over the ``_``-split words of
+        the parameter name.  For each ``(position, word)`` pair it tries the
+        character at that position first lower-case then upper-case.  The first
+        candidate not already taken is assigned.
+
+        Example: ``num_epochs`` with ``n``, ``N``, ``e``, ``E`` all taken
+        would try ``u``, ``U``, ``p``, ``P``, … until one is free.
+
+        If no single-character candidate is ever free the parameter receives no
+        short name.  Already-registered explicit short names (from
+        :meth:`_add_parameter`) are never displaced.
+        """
+        taken: set = set(self._shortname2parameters.keys())
+        for name, param in self._name2parameters.items():
+            if param.short_name is not None:
+                continue  # explicit short name — leave it alone
+            words = [w for w in name.split("_") if w]
+            max_len = max(len(w) for w in words)
+            assigned = False
+            for pos in range(max_len):
+                for word in words:
+                    if pos >= len(word):
+                        continue
+                    for c in (word[pos].lower(), word[pos].upper()):
+                        if c not in taken:
+                            param.set_short_name(c)
+                            self._shortname2parameters[c] = param
+                            taken.add(c)
+                            assigned = True
+                            break
+                    if assigned:
+                        break
+                if assigned:
+                    break
+
     def _find_subcommand_param(self):
         """Return the first :class:`~fargv.parameters.subcommand.FargvSubcommand` found.
 

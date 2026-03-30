@@ -240,6 +240,8 @@ def function_to_parser(
             fargv_param = fargv_cls(REQUIRED, name=pname)
         else:
             fargv_cls = _annotation_to_fargv_cls(annotation)
+            if fargv_cls is None and default is None:
+                continue  # uninferable type; function keeps its own None default
             fargv_param = (
                 fargv_cls(default, name=pname)
                 if fargv_cls is not None
