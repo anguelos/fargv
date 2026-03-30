@@ -1,65 +1,158 @@
-# fargv: The laziest command-line argument parser  
+# fargv
+
+[![PyPI](https://img.shields.io/pypi/v/fargv)](https://pypi.org/project/fargv/)
+[![Downloads](https://img.shields.io/pypi/dm/fargv)](https://pypi.org/project/fargv/)
+[![Documentation Status](https://readthedocs.org/projects/fargv/badge/?version=latest)](https://fargv.readthedocs.io/en/latest/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/fargv)](https://pypi.org/project/fargv/)
+[![GitHub repo size](https://img.shields.io/github/repo-size/anguelos/fargv)](https://github.com/anguelos/fargv)
+
+A very easy to use argument parser for Python scripts.
 
 ## Installation
 
 ```bash
-pip3 pip install --user --upgrade git+https://github.com/anguelos/fargv
+pip install fargv
 ```
 
-## Usage in 3 Simple Steps!
+## Lazy usage
 
-Fast argument parser
+Pass a plain dict — types, short names, config file, and env-var overrides are
+all inferred automatically.
 
-* Import
 ```python
-from fargv import fargv 
-```
-* Define a dictionary with default parameters
-```python
-params = {
-    "anInt": 1,
-    "aFloat": 0.1,
-    "aBoolean": False,
-    "anotherBoolean": True,
-    "aString": "Hello",
-    "aStringReference": "{aString} World",
-    "anIntWithHelp": [2,"This would be the help"],
-    "aChoice": [("choice1","choice2","choice3","choice4"),"And this must be the help"],
-    "aPositionalSwitch": [set([]), "This is a convenient way to pass colections of things"]
-}
+import fargv
+
+p, _ = fargv.parse({
+    "data_dir":   "/data",                   # str — base path, referenced below
+    "output_dir": "{data_dir}/results",      # str — resolved via {data_dir}
+    "mode":       ("train", "eval", "test"), # choice — first element is default
+    "verbose":    False,                     # bool switch
+    "files":      [],                        # positional — collects leftover args
+})
+
+print(f"Reading from {p.data_dir}, writing to {p.output_dir}")
+print(f"Mode: {p.mode}  verbose: {p.verbose}  files: {p.files}")
 ```
 
-* Parse user provided argv to override defaults
-```python
-new_params, help_str = fargv(params)
-```
-
-* In shell:
 ```bash
-my_program -anInt 34 -aFloat=2.3 -aBoolean -anotherBoolean=False
+python myscript.py --data_dir=/datasets/cifar --mode=eval --verbose model_a.pt model_b.pt
+# data_dir=/datasets/cifar  output_dir=/datasets/cifar/results
+# mode=eval  verbose=True  files=['model_a.pt', 'model_b.pt']
 ```
 
-## Features:
-* Type checking
-* Automatic help generation
-* Params usable as dictionary or struct
-* Can read environmental variables as well
-* macro-parameters
-* fast autocomplete generation
-* Switches with positional values 
+Every parameter automatically gets a short flag inferred from its name
+(`-d`, `-o`, `-m`, `-V`, …), `--help` output, bash tab-completion, a config
+file at `~/.myscript.config.json`, and env-var overrides (`MYSCRIPT_MODE=eval`).
 
-### Autocomplete
+## Precise usage
 
-Static autocomplete for any program using fargv can be enabled with a single command.
+Use explicit `FargvParameter` types for full control — descriptions, validation,
+and stream / path / tuple parameters.
 
-The following command enables autocomplete for fargv_demo.py in the current shell where it is run.
+```python
+import fargv
+
+p, _ = fargv.parse({
+    "data_dir":   fargv.FargvStr("/data",
+                      description="Root input directory"),
+    "output_dir": fargv.FargvStr("{data_dir}/results",
+                      description="Where outputs are written ({data_dir} resolved at parse time)"),
+    "mode":       fargv.FargvChoice(["train", "eval", "test"],
+                      description="Run mode"),
+    "verbose":    fargv.FargvBool(False,
+                      description="Enable verbose logging"),
+    "files":      fargv.FargvPositional([],
+                      description="Input files (positional)"),
+})
+```
+
+The CLI behaviour is identical to the lazy version; the explicit form adds
+per-parameter descriptions in `--help` and makes the intent clearer for
+larger scripts.
+
+## Using fargv from bash
+
+`python -m fargv` calls any Python callable directly from the shell —
+types and defaults are inferred from the function's signature automatically,
+with no wrapper code required.
+
 ```bash
-source <(./examples/fargv_demo.py -bash_autocomplete)
+python -m fargv numpy.linspace --help
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 ```
-fargv_demo.py should be an executable file employing the shebang (#!/usr/bin/env python3) or something equivalent.
-For a temporary solution, the autocomplete bash code can go in a script in /etc/bash_completion.d or in .bashrc.
 
-### Switch Macros
+![fargv bash demo](docs/_static/fargv_bash.png)
 
-A switch might be a macro for other switches.
-This allows for example to break many files into a single root switch and all other switches beeing file names relative to that path.
+## Comparison with other argument parsers
+
+| Feature | fargv | argparse | click | typer | fire | docopt |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Zero boilerplate | ✅ | ❌ | 🟡 | 🟡 | ✅ | 🟡 |
+| Type inference from defaults | ✅ | ❌ | ❌ | ❌ | 🟡 | ❌ |
+| Type inference from annotations | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Auto-generated help | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Auto short-name inference | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Config file (built-in) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| String interpolation | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Subcommands | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
+| `python -m pkg.func` invocation | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Bash tab completion | ✅ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| No runtime dependencies | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Environment variable override | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| Mutually exclusive parameters | ❌ | ✅ | ✅ | ✅ | ❌ | 🟡 |
+| Parameter validation / constraints | ❌ | 🟡 | ✅ | ✅ | ❌ | ❌ |
+| GUI / Jupyter widgets | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+✅ built-in  · 🟡 available with extra work or plugins  · ❌ not supported
+
+## License
+
+MIT
+
+---
+
+## Legacy usage (v < 0.1.9)
+
+The original API uses single-dash flags and a plain dict.  It is still fully
+supported but new scripts should prefer `fargv.parse` above.
+
+```python
+import fargv
+
+p, _ = fargv.fargv({
+    "name":    "world",            # str
+    "count":   1,                  # int
+    "verbose": False,              # bool flag
+    "mode":    ("fast", "slow"),   # choice, first is default
+    "files":   set(),              # positional list
+})
+
+print(f"Hello, {p.name}! count={p.count}")
+```
+
+Both assignment and space-separated forms are accepted:
+
+```bash
+python myscript.py -name=Alice -count=3 -verbose -mode=slow -files a.txt b.txt c.txt
+python myscript.py -name Alice -count 3 -verbose -mode slow -files a.txt b.txt c.txt
+```
+
+Attach a description with a two-element tuple:
+
+```python
+p, _ = fargv.fargv({
+    "epochs": (10,    "Number of training epochs"),
+    "lr":     (0.001, "Learning rate"),
+})
+```
+
+Built-in legacy parameters:
+
+| Parameter | Short | Description |
+|---|---|---|
+| `-help` | `-h` | Print help and exit |
+| `-bash_autocomplete` | | Print bash autocomplete script |
+| `-v` | | Verbosity level |
+
+String interpolation and env-var override work the same way as in the new API.

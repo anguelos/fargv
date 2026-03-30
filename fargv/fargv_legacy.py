@@ -1,8 +1,21 @@
+"""Legacy single-dash argument parser — the original fargv API.
+
+This module implements the original fargv interface where parameters use
+single-dash ``-name=value`` syntax and types are inferred directly from the
+Python type of the default value in a plain dict.
+
+The primary entry point is :func:`fargv`.  All other functions in this module
+are either helpers or legacy compatibility shims.
+
+.. note::
+   New code should prefer :func:`fargv.parse` (the OO API) which uses
+   standard ``--long`` / ``-s`` Unix-style syntax.
+"""
 import os
 import re
 import sys
 from collections import namedtuple
-from typing import Union
+from typing import Union, Optional, List, Literal
 import json
 import types
 import inspect
@@ -43,6 +56,16 @@ def can_override(standard_args:dict, new_args:dict) -> bool:
 
 
 def override(standard_args:dict, new_args:dict) -> dict:
+    """Override *standard_args* entries with values from *new_args*.
+
+    Calls :func:`can_override` first; raises :class:`ValueError` when the
+    validation fails (unknown keys or type mismatches).
+
+    :param standard_args: The base dictionary to update.
+    :param new_args: Key/value pairs to apply on top.
+    :return: A new dict with the merged values.
+    :raises ValueError: If *new_args* contains keys or types not in *standard_args*.
+    """
     if can_override(standard_args, new_args):
         result = standard_args.copy()
         result.update(new_args)
@@ -109,31 +132,34 @@ def fargv_dict(default_switches, argv=None, use_enviromental_variables=True, ret
     return fargv(return_type="SimpleNamespace",default_switches=default_switches, argv=None,use_enviromental_variables=use_enviromental_variables,return_named_tuple=return_named_tuple, spaces_are_equals=spaces_are_equals, description=description)
 
 
-def fargv(default_switches, argv=None, use_enviromental_variables=True, return_type="SimpleNamespace", return_named_tuple=None,
-          spaces_are_equals=True, description=None):
+def fargv(default_switches, argv: Optional[List[str]] = None, use_enviromental_variables: bool =True, return_type: Literal["SimpleNamespace", "dict", "namedtuple"] ="SimpleNamespace", return_named_tuple=None,
+          spaces_are_equals: bool=True, description: Optional[str]=None):
     """Parse the argument list and create a dictionary with all parameters.
 
-    Argument types:
-        Strings: The most generic parameter type. If you need more specific data types, you run eval on a string type.
-        Integers: Anything that can be used to construct an int from a string.
-        Floating Point: Anything that can be used to construct a float from a string.
-        Booleans: If set with out a parameter, it is switched to True. Other wise a case incensitive value of true or
-            false
-        Choices: Defined as tuples in the parameter dictionary.
-        Positionals: Defined as sets in the parameter dictionary. They should not contain tabs and a string list will be
-            returned. This type is designed to work well with wildcards.
+    Parameter types are inferred from the default value:
 
-    :param default_switches: A dictionary with parameters as keys and default values as elements. If the value is a
-        collection of two elements who's second element is a string.
-    :param argv: a list of strings which contains all parameters in the form '-PARAM_NAME=PARAM_VALUE'. This list will
-        be emptied of all switches and their values after processed, if the argv is needed full, pass a copy.
-    :param use_enviromental_variables: If set to True, before parsing argv elements to override the default settings,
-        the default settings are first overridden by any assigned environmental variable.
-    :param return_named_tuple: If set to True, result will be a named tuple instead of a dictionary.
-    :param spaces_are_equals: If set to True, a space bar is considered a valid separator if a parameter and its value.
-    :param description: A string describing the overall function of the script. If None (the default parameter) is passed,
-        the docstring of the calling file will be used if defined.
-    :return: Dictionary that is the same as the default values with updated values and the help string.
+    - **str** — string; supports ``{key}`` interpolation across parameters
+    - **int** — integer
+    - **float** — floating point
+    - **bool** — flag; bare ``-name`` sets to ``True``
+    - **tuple** — choice; first element is the default
+    - **set** — positional list; collected as a list of strings
+
+    :param default_switches: Dictionary mapping parameter names to defaults.
+        A two-element value ``(default, "description string")`` attaches help text.
+    :param argv: Argument list to parse. Defaults to ``sys.argv``.
+        Mutated in-place: consumed switches are removed, positionals remain.
+    :param use_enviromental_variables: When ``True`` (default), environment
+        variables with matching names override the defaults before argv parsing.
+    :param return_type: Output format — ``"SimpleNamespace"`` (default),
+        ``"dict"``, or ``"namedtuple"``.
+    :param return_named_tuple: Deprecated. Use ``return_type`` instead.
+    :param spaces_are_equals: When ``True`` (default), ``-key value`` is
+        equivalent to ``-key=value``.
+    :param description: Script description shown in help. Defaults to the
+        calling file's module docstring if present.
+    :return: Tuple of ``(params, help_str)`` where ``params`` is the parsed
+        namespace in the requested return type.
     """
     if description is None:
         caller_filename = inspect.getframeinfo(inspect.currentframe().f_back).filename  #  Assuming the caller is the main script file
@@ -203,7 +229,7 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
             while param_list_end < len(argv) and not argv[param_list_end].startswith("-"):
                 param_list_end += 1
             if len(argv[param_list_start]) > len(switch_name)+1 and argv[param_list_start][len(switch_name)+1] == "=":
-                items = [argv[param_list_start][len(switch_name)+2]]
+                items = [argv[param_list_start][len(switch_name)+2:]]
             else:
                 items=[]
             items += argv[param_list_start + 1: param_list_end]
@@ -217,6 +243,9 @@ def fargv(default_switches, argv=None, use_enviromental_variables=True, return_t
     for n in range(len(argv)):
         if len(argv[n]) > 0 and argv[n][0] == "-":
             key_str = argv[n][1:].split("=")[0]
+            if key_str not in default_switches:
+                sys.stderr.write("Unknown parameter: -" + key_str + "\n")
+                sys.exit(1)
             expected_type = type(default_switches[key_str])
             if "=" in argv[n]:
                 val_str = argv[n][argv[n].find("=") + 1:]

@@ -1,19 +1,44 @@
-#from .argv_parser import fargv, fargv2dict, t_fargv_args
-#from .util import get_verbosity, set_verbosity, warn
+"""fargv — Argument parsing with zero boilerplate.
+
+This is the top-level package.  Two distinct APIs are provided:
+
+**Legacy API** (single-dash, dict-based)::
+
+    from fargv import fargv
+    p, help_str = fargv({"lr": 0.01, "epochs": 10})
+
+**New OO API** (double-dash, Unix-style)::
+
+    from fargv import parse
+    p, help_str = parse({"lr": 0.01, "epochs": 10})
+
+All :class:`~fargv.parameters.base.FargvParameter` subclasses are re-exported
+from this package for convenience.
+"""
 import sys
+from .version import __version__
+from .fargv_legacy import fargv
+from .parse import parse
+from .parameters import (
+    FargvError, FargvParameter, REQUIRED,
+    FargvInt, FargvFloat, FargvBool, FargvBoolHelp,
+    FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig,
+    FargvStr, FargvChoice, FargvPositional,
+    FargvStream, FargvInputStream, FargvOutputStream,
+    FargvPath, FargvExistingFile, FargvNonExistingFile, FargvFile,
+    FargvTuple, FargvSubcommand,
+)
+from .parser import ArgumentParser
 
-from .fargv_param_registry import Name, Registry, FargvNameException, FargvDuplicateNameException
-#from .fargv_param_definition import FargvBool, FargvInt, FargvFloat, FargvStr, FargvRefStr, FargvFname, FargvExistingFname, FargvMissingFname, FargvParamException
-from .fargv_param_value import ParamDefinition, Bool, Int, Float, Str, StrRef, Choice, Literal, Src, Sequence, FargvValueNotAllowedError, type_from_definition_data, create_from_definition_data
-
-from .fargv_argparser import FargvArgparseException, UnixArgParser
-from .fargv_legacy import fargv as fargv_legacy
-
-def fargv(*args):
-    sys.stderr.write(f"Warning: fargv is deprecated and will be removed in the future. Use fargv_legacy instead.\n")
-    return fargv_legacy(*args)
-
-
-all = [
-    "fargv", "fargv_legacy", "FargvBool", "FargvInt", "FargvFloat", "FargvStr", "FargvFilename", "FargvExistingFname", "FargvMissingFname", "FargvParamException", "__registry",
+__all__ = [
+    "fargv", "parse",
+    "FargvError", "FargvParameter", "REQUIRED",
+    "FargvInt", "FargvFloat", "FargvBool", "FargvBoolHelp",
+    "FargvHelp", "FargvVerbosity", "FargvBashAutocomplete", "FargvConfig", "FargvAutoConfig",
+    "FargvStr", "FargvChoice", "FargvPositional",
+    "FargvStream", "FargvInputStream", "FargvOutputStream",
+    "FargvPath", "FargvExistingFile", "FargvNonExistingFile", "FargvFile",
+    "FargvTuple", "FargvSubcommand",
+    "ArgumentParser",
+    "__version__",
 ]

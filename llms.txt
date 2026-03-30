@@ -1,0 +1,487 @@
+# fargv
+
+> Zero-friction Python CLI argument parser. Types are inferred from default
+> values; no decorators, no subclassing, no schema files required.
+
+## Installation
+
+```
+pip install fargv
+```
+
+## Two APIs
+
+fargv exposes two APIs that share the same type-inference rules:
+
+| API | Entry point | Style |
+|-----|-------------|-------|
+| Legacy | `fargv.fargv(default_switches, ...)` | dict → `(namespace, help_str)` |
+| New OO | `fargv.parse(definition, ...)` | dict / function / `ArgumentParser` → `(namespace, help_str)` |
+
+Both return `(namespace, help_str)`.  The namespace is a `SimpleNamespace` by
+default; pass `return_type="dict"` or `return_type="namedtuple"` to change it.
+
+---
+
+## Type-inference rules
+
+Both APIs infer parameter types from the Python type of the default value.
+`bool` is checked before `int` because `bool` is a subclass of `int`.
+
+| Default value | Inferred type | `Fargv*` class | CLI example |
+|---|---|---|---|
+| `False` / `True` | `bool` | `FargvBool` | `--verbose` (bare flag toggles default) |
+| `0`, `42` | `int` | `FargvInt` | `--count=3` or `--count 3` |
+| `0.0`, `3.14` | `float` | `FargvFloat` | `--lr=0.001` |
+| `"hello"` | `str` | `FargvStr` | `--name=Alice` (supports `{key}` interpolation) |
+| `("a","b","c")` | `tuple` | `FargvChoice` | `--mode=b` (first element is default) |
+| `[]` or `["x"]` | `list` | `FargvPositional` | trailing tokens: `a.txt b.txt` |
+| `set()` | `set` | `FargvPositional` | same as `list` (legacy compat) |
+
+### Two-element `(default, "description")` wrapper
+
+Any default value can be wrapped with a description string:
+
+```python
+{"epochs": (10, "Training epochs"), "lr": (0.001, "Learning rate")}
+```
+
+Detection rule: value is not a `str`, not a `set`, has `len`, `len == 2`,
+and the second element is a `str`.  Therefore a two-string tuple like
+`("fast", "slow")` is `(default="fast", description="slow")` — a plain
+string parameter, **not** a choice.  Use three or more elements for choices:
+`("fast", "slow", "medium")`.
+
+### No-literal parameter types (OO API only)
+
+| `Fargv*` class | Use |
+|---|---|
+| `FargvInt(0, is_count_switch=True)` | `-vvvv` = 4; `--verbosity=4` also accepted |
+| `FargvInputStream` | Text input stream; defaults to `sys.stdin` |
+| `FargvOutputStream` | Text output stream; defaults to `sys.stdout` |
+| `FargvStream` | Base class for streams (use the concrete subclasses) |
+| `FargvPath` | `pathlib.Path` with optional existence/non-existence validation |
+| `FargvExistingFile` | `FargvPath(must_exist=True)` |
+| `FargvNonExistingFile` | `FargvPath(must_not_exist=True)` |
+| `FargvFile` | `FargvPath(parent_must_exist=True)` |
+| `FargvTuple((int,int), ...)` | Fixed-length typed tuple via `ast.literal_eval` |
+| `FargvSubcommand({"cmd": {...}}, ...)` | Git-style nested sub-parser |
+
+---
+
+## Legacy API — `fargv.fargv`
+
+```python
+import fargv
+
+p, help_str = fargv.fargv({
+    "name":    "world",           # str
+    "count":   1,                 # int
+    "lr":      0.001,             # float
+    "verbose": False,             # bool flag
+    "mode":    ("fast", "slow"),  # choice, first is default  ← needs 2+ elements
+    "files":   set(),             # positional list (legacy)
+})
+# p.name, p.count, p.lr, p.verbose, p.mode, p.files
+```
+
+### Signature
+
+```python
+def fargv(
+    default_switches: dict,
+    argv: Optional[List[str]] = None,       # defaults to sys.argv; mutated in-place
+    use_enviromental_variables: bool = True, # env vars override defaults by name
+    return_type: Literal["SimpleNamespace","dict","namedtuple"] = "SimpleNamespace",
+    spaces_are_equals: bool = True,          # -key value ≡ -key=value
+    description: Optional[str] = None,      # defaults to calling module's docstring
+) -> Tuple[namespace, str]
+```
+
+Legacy uses single-dash prefixes: `-name=value` or `-name value`.
+
+### Built-in legacy parameters (auto-injected, removed from result)
+
+| Flag | Effect |
+|------|--------|
+| `-help` / `-h` | Print help and exit |
+| `-bash_autocomplete` | Print bash completion script and exit |
+| `-v` | Set verbosity integer (passed to `fargv.util.set_verbosity`) |
+
+### String interpolation (legacy and OO)
+
+```python
+p, _ = fargv.fargv({"base": "/tmp", "out": "{base}/results"})
+# p.out == "/tmp/results"
+```
+
+Cycles raise `ValueError`.  Unknown `{keys}` are preserved literally.
+
+### Environment variable override (legacy)
+
+Before parsing argv, any key that matches an environment variable name is
+overridden.  The env-var value is cast to the parameter's type.
+
+```bash
+count=42 python myscript.py   # overrides the default for 'count'
+```
+
+---
+
+## New OO API — `fargv.parse`
+
+```python
+import fargv
+
+p, help_str = fargv.parse(
+    {"name": "world", "count": 1, "files": []},
+    given_parameters=["myscript.py", "--name=Alice", "--count=3", "a.txt"],
+)
+```
+
+### Signature
+
+```python
+def parse(
+    definition: Union[dict, ArgumentParser, Callable],
+    given_parameters: Optional[Union[Dict[str,Any], List[str]]] = None,
+    argv_parse_mode: Literal["legacy","unix"] = "unix",
+    allow_implied_positionals: bool = True,
+    tolerate_unassigned_arguments: bool = False,
+    ui: Optional[Literal["cli","tk","qt","jupyter"]] = None,
+    auto_define_help: bool = True,
+    auto_define_bash_autocomplete: bool = True,
+    auto_define_verbosity: bool = True,
+    auto_define_config: bool = True,         # --config / --auto_configure
+    colored_help: Optional[bool] = None,
+    return_type: Literal["SimpleNamespace","dict","namedtuple"] = "SimpleNamespace",
+    subcommand_return_type: Literal["flat","nested","tuple"] = "flat",
+    non_defaults_are_mandatory: bool = False,
+    fn_def_tolerate_wildcards: bool = False,
+) -> Tuple[namespace, str]
+```
+
+### `definition` variants
+
+**dict** — same type-inference rules as legacy; `FargvParameter` instances
+may appear as values and are used directly:
+
+```python
+from fargv.parameters import FargvInt, FargvStr
+fargv.parse({"n": FargvInt(0, short_name="n"), "label": FargvStr("hi")}, ...)
+```
+
+**callable** — parameters derived from type annotations and defaults:
+
+```python
+def train(lr: float = 0.001, epochs: int = 10, model: str = "resnet"):
+    ...
+
+p, _ = fargv.parse(train)
+# CLI: myscript.py --lr=0.0001 --epochs=50 --model=vgg
+```
+
+- Parameters **with** a default → Fargv class inferred from annotation, then from value.
+- Parameters **without** a default + `non_defaults_are_mandatory=False` (default) →
+  `FargvError` raised at definition time.
+- Parameters **without** a default + `non_defaults_are_mandatory=True` →
+  marked `REQUIRED`; `FargvError` raised at parse time if not supplied.
+- `*args` / `**kwargs` raise unless `fn_def_tolerate_wildcards=True`.
+
+**`ArgumentParser`** — used as-is; `argv_parse_mode` does **not** override
+its prefix settings.  If auto-param flags conflict with already-defined
+parameters, a warning is written to `sys.stderr`.
+
+### `given_parameters` variants
+
+| Value | Behaviour |
+|-------|-----------|
+| `None` | Uses `sys.argv` (ui="cli") |
+| `List[str]` | Parsed as argv; first element is the program name |
+| `Dict[str,Any]` | Applied directly via `FargvParameter.evaluate()`; bypasses CLI parsing |
+
+### Built-in OO parameters (auto-injected, stripped from result)
+
+| Flag | Effect |
+|------|--------|
+| `--help` / `-h` | Print coloured help and exit |
+| `--verbosity` / `-v` | Count switch: `-vvv` = 3; also `--verbosity=3` |
+| `--bash_autocomplete` | Print bash completion script and exit |
+| `--config` | Path to JSON config file; default `~/.{appname}.config.json` |
+| `--auto_configure` | Print current values as JSON and exit |
+
+Disable any with `auto_define_help=False`, `auto_define_config=False`, etc.
+
+**Config file priority**: coded defaults → config file → CLI arguments.
+
+### Positionals
+
+Exactly one `FargvPositional` (or `list` default) per parser.  With
+`allow_implied_positionals=True` (default) all unmatched tokens are routed
+to it automatically.  If no positional is defined and unmatched tokens appear:
+
+- `tolerate_unassigned_arguments=False` (default) → `FargvError`
+- `tolerate_unassigned_arguments=True` → silently discarded
+
+### `argv_parse_mode`
+
+| Mode | Long prefix | Short prefix | Example |
+|------|------------|--------------|---------|
+| `"unix"` (default) | `--` | `-` | `--count=3`, `-c 3`, `-cvd` |
+| `"legacy"` | `-` | `-` | `-count=3`, `-count 3` |
+
+In unix mode, short flags may be combined: `-cvd` expands to
+`--config --verbose --debug` (all must be bool or count-switch).
+
+### `ui` parameter
+
+`None` → auto-detect: `"cli"` unless `ipykernel` is in `sys.modules`.
+`"tk"` / `"qt"` / `"jupyter"` → `NotImplementedError` (planned).
+
+### `colored_help`
+
+`None` (default) → ANSI colours when `sys.stdout` is a TTY.
+`True` / `False` → force on / off.
+
+Colour scheme used in help output:
+
+| Element | Colour |
+|---------|--------|
+| `--param-name, -s` | **Bold** |
+| `<type>` | Cyan |
+| default value | Green |
+| `REQUIRED` | Yellow bold |
+| Section headers | Bold white |
+| Extra metadata (choices, repeatable) | Dim |
+
+---
+
+## `ArgumentParser` (direct use)
+
+```python
+from fargv.parser import ArgumentParser
+from fargv.parameters import FargvInt, FargvStr, FargvBool, FargvPositional
+
+parser = ArgumentParser(long_prefix="--", short_prefix="-")
+parser._add_parameter(FargvInt(0,     name="count",   short_name="n"))
+parser._add_parameter(FargvStr("",    name="label",   short_name="l"))
+parser._add_parameter(FargvBool(False,name="verbose", short_name="v"))
+parser._add_parameter(FargvPositional(name="files"))
+
+result = parser.parse()          # uses sys.argv
+result = parser.parse(["myscript.py", "--count=3", "a.txt"])
+
+parser.generate_help_message(colored=None)     # str
+parser.generate_bash_autocomplete()            # str
+```
+
+`parser.parse()` returns a plain `dict`.  Wrap with `fargv.parse()` to get a
+namespace and auto-params.
+
+---
+
+## `FargvParameter` base class
+
+All parameter classes inherit from `FargvParameter` (ABC).
+
+```python
+param.value          # current value (after parsing)
+param.default        # original default
+param.name           # long name (str)
+param.short_name     # short name or None
+param.description    # help text or None
+param.is_bool        # True for FargvBool / FargvBoolHelp
+param.is_positional  # True for FargvPositional
+param.has_value      # False if mandatory and not yet set
+param._mandatory     # True when created with REQUIRED default
+param.docstring(colored=None)          # formatted help line
+param.evaluate(val)                    # set value from Python obj or str
+param.ingest_value_strings(*strs)      # set value from CLI token(s); returns leftover list
+```
+
+### `REQUIRED` sentinel
+
+```python
+from fargv.parameters import FargvInt, REQUIRED
+p = FargvInt(REQUIRED, name="port")
+p._mandatory   # True
+p.has_value    # False
+```
+
+Pass `REQUIRED` as the default to make any parameter mandatory.
+
+### `FargvInt(is_count_switch=True)`
+
+```python
+from fargv.parameters import FargvInt
+v = FargvInt(0, name="verbosity", short_name="v", is_count_switch=True)
+```
+
+- Bare repeated short flags `-vvv` increment the counter (each bare flag → +1).
+- An explicit integer value `--verbosity=3` sets it directly.
+- Non-integer trailing tokens are returned as leftovers, not consumed.
+
+### `FargvStr` interpolation
+
+`FargvStr.value` resolves `{key}` references by looking up `key` in
+`param.other_string_params` (a `Dict[str, FargvStr]`).  `fargv.parse` /
+`dict_to_parser` wires this automatically for dict definitions.  Unknown keys
+are preserved literally.  Cross-param cycles are not detected (the lookup
+always uses the originating param's map).
+
+### `FargvInputStream` / `FargvOutputStream`
+
+```python
+from fargv.parameters import FargvInputStream, FargvOutputStream
+inp = FargvInputStream(name="data")    # default: sys.stdin
+out = FargvOutputStream(name="output") # default: sys.stdout
+# CLI: --data=corpus.txt   --output=results.txt   --output=stderr
+```
+
+Mode (`r`/`w`) is inferred from the class.  Accepts `"stdin"`, `"stdout"`,
+`"stderr"` as literal CLI values.  Write-mode streams refuse to overwrite
+existing files.
+
+### `FargvPath` hierarchy
+
+```python
+from fargv.parameters import FargvPath, FargvExistingFile, FargvNonExistingFile, FargvFile
+
+FargvPath(must_exist=True, name="model")          # same as FargvExistingFile
+FargvExistingFile(name="model")                    # path must exist
+FargvNonExistingFile(name="out")                   # path must NOT exist
+FargvFile(name="log")                              # parent dir must exist
+# CLI: --model=/weights/best.pt
+```
+
+All path parameters return `pathlib.Path`.
+
+### `FargvTuple`
+
+```python
+from fargv.parameters import FargvTuple
+sz = FargvTuple((int, int), name="size")
+# CLI: --size=(640,480)   →   (640, 480)
+# Single-element: --size=224   →   (224,)
+
+opt = FargvTuple((int, int), optional=True, name="crop")
+# CLI: --crop=()   →   None
+```
+
+Type annotations `Tuple[int, int]` and `Optional[Tuple[int, int]]` in
+function signatures are mapped automatically to `FargvTuple`.
+
+### `FargvSubcommand`
+
+```python
+from fargv.parameters import FargvSubcommand
+from fargv.parser import ArgumentParser
+
+p = ArgumentParser()
+p._add_parameter(FargvSubcommand(
+    {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+    name="cmd",
+))
+result = p.parse(["prog", "train", "--lr=0.5"])
+# result["cmd"] == {"name": "train", "result": {"lr": 0.5}}
+```
+
+Via `fargv.parse` with `subcommand_return_type`:
+
+| Value | `p.cmd` | Sub-params location |
+|---|---|---|
+| `"flat"` (default) | `"train"` (selected name) | merged into top-level namespace |
+| `"nested"` | `SimpleNamespace(name="train", lr=0.5)` | inside `p.cmd` |
+| `"tuple"` | — | returns `((name, sub_ns, parent_ns), help_str)` |
+
+```python
+p, _ = fargv.parse(
+    {"cmd": {"train": {"lr": 0.01}, "eval": {"dataset": "val"}}},
+    given_parameters=["prog", "train", "--lr=0.5"],
+    subcommand_return_type="flat",
+)
+# p.cmd == "train", p.lr == 0.5
+```
+
+---
+
+## `type_detection` module (internal, importable)
+
+```python
+from fargv.type_detection import dict_to_parser, function_to_parser, definition_to_parser
+
+parser = dict_to_parser({"n": 0, "label": "hi"}, long_prefix="--")
+parser = function_to_parser(my_fn, non_defaults_are_mandatory=True)
+parser = definition_to_parser(anything)   # dispatches automatically
+```
+
+---
+
+## `guess_program_name()` (internal, importable)
+
+```python
+from fargv.global_guessing import guess_program_name
+name = guess_program_name()
+```
+
+Priority: `sys.argv[0]` (if real file) → `__main__.__spec__.name` (entry
+points, `python -m`) → `__main__.__file__` → call-stack top → `"fargv"`.
+
+---
+
+## Common patterns
+
+### Minimal script
+
+```python
+import fargv
+
+p, _ = fargv.parse({"name": "world", "count": 1, "verbose": False})
+print(f"Hello {p.name} x{p.count}")
+```
+
+### Function-based CLI
+
+```python
+import fargv
+
+def main(lr: float = 0.001, epochs: int = 10, output: str = "model.pt"):
+    ...
+
+p, _ = fargv.parse(main)
+main(**vars(p))
+```
+
+### Mandatory parameter
+
+```python
+import fargv
+
+def run(host: str, port: int = 8080):
+    ...
+
+p, _ = fargv.parse(run, non_defaults_are_mandatory=True)
+# Omitting --host raises FargvError: "Required parameter 'host' was not provided"
+```
+
+### Pre-parsed dict (testing / programmatic use)
+
+```python
+import fargv
+
+p, _ = fargv.parse({"lr": 0.001, "epochs": 10}, given_parameters={"lr": 0.0001})
+assert p.lr == 0.0001
+```
+
+### Legacy API in existing code
+
+```python
+import fargv
+
+p, _ = fargv.fargv({
+    "lr":     (0.001, "Learning rate"),
+    "epochs": (10,    "Training epochs"),
+    "model":  ("resnet", "vgg", "mobilenet"),  # 3-element tuple = choice
+    "inputs": set(),                            # positional
+})
+```

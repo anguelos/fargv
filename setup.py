@@ -1,9 +1,14 @@
 #import setuptools
 from setuptools import setup, Extension
 
+# Read version from the single source of truth
+_version = {}
+with open('fargv/version.py') as _f:
+    exec(_f.read(), _version)
+
 setup(
     name='fargv',
-    version='2.0.1',
+    version=_version['__version__'],
     packages=['fargv'],
     license='MIT',
     author='Anguelos Nicolaou',
@@ -22,5 +27,16 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering"],
     install_requires=[],
-    extras_require=[],
+    extras_require={
+        "dev": [
+            "pytest",
+            "pytest-cov",
+        ],
+        "docs": [
+            "sphinx",
+            "sphinx-rtd-theme",
+            "myst-parser",
+            "sphinx-copybutton",
+        ],
+    },
 )
