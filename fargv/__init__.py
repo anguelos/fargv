@@ -16,6 +16,7 @@ All :class:`~fargv.parameters.base.FargvParameter` subclasses are re-exported
 from this package for convenience.
 """
 import sys
+from .version import __version__
 from .fargv_legacy import fargv
 from .parse import parse
 from .parameters import (
@@ -39,4 +40,5 @@ __all__ = [
     "FargvPath", "FargvExistingFile", "FargvNonExistingFile", "FargvFile",
     "FargvTuple", "FargvSubcommand",
     "ArgumentParser",
+    "__version__",
 ]

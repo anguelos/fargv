@@ -1,0 +1,53 @@
+name: Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest test/unittest/ -q --cov=fargv --cov-report=term-missing --cov-report=json --cov-branch
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          TOTAL=$(python -c "import json; d=json.load(open('coverage.json')); print(round(d['totals']['percent_covered']))")
+          if   [ "$TOTAL" -ge 90 ]; then COLOR=brightgreen
+          elif [ "$TOTAL" -ge 75 ]; then COLOR=green
+          elif [ "$TOTAL" -ge 60 ]; then COLOR=yellow
+          else COLOR=red
+          fi
+          JSON='{"schemaVersion":1,"label":"coverage","message":"'$TOTAL'%","color":"'$COLOR'"}'
+          if git fetch origin badges 2>/dev/null; then
+            git checkout badges
+          else
+            git checkout --orphan badges
+            git rm -rf . 2>/dev/null || true
+          fi
+          mkdir -p badges
+          echo "$JSON" > badges/coverage.json
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add badges/coverage.json
+          git diff --cached --quiet || git commit -m "chore: update coverage badge [$TOTAL%]"
+          git push origin badges
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

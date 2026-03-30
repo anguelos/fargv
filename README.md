@@ -14,78 +14,74 @@ A very easy to use argument parser for Python scripts.
 pip install fargv
 ```
 
-## Usage
+## Lazy usage
 
-Define your parameters as a plain Python dictionary — types are inferred from the default values:
+Pass a plain dict — types, short names, config file, and env-var overrides are
+all inferred automatically.
 
 ```python
 import fargv
 
-p, _ = fargv.fargv({
-    "name":    "world",            # str
-    "count":   1,                  # int
-    "verbose": False,              # bool flag
-    "mode":    ("fast", "slow"),   # choice, first is default
-    "files":   set(),              # positional list
+p, _ = fargv.parse({
+    "data_dir":   "/data",                   # str — base path, referenced below
+    "output_dir": "{data_dir}/results",      # str — resolved via {data_dir}
+    "mode":       ("train", "eval", "test"), # choice — first element is default
+    "verbose":    False,                     # bool switch
+    "files":      [],                        # positional — collects leftover args
 })
 
-print(f"Hello, {p.name}! count={p.count}")
+print(f"Reading from {p.data_dir}, writing to {p.output_dir}")
+print(f"Mode: {p.mode}  verbose: {p.verbose}  files: {p.files}")
 ```
-
-Run your script:
 
 ```bash
-python myscript.py -name=Alice -count=3 -verbose -mode=slow -files a.txt b.txt c.txt
+python myscript.py --data_dir=/datasets/cifar --mode=eval --verbose model_a.pt model_b.pt
+# data_dir=/datasets/cifar  output_dir=/datasets/cifar/results
+# mode=eval  verbose=True  files=['model_a.pt', 'model_b.pt']
 ```
 
-## Parameter Types
+Every parameter automatically gets a short flag inferred from its name
+(`-d`, `-o`, `-m`, `-V`, …), `--help` output, bash tab-completion, a config
+file at `~/.myscript.config.json`, and env-var overrides (`MYSCRIPT_MODE=eval`).
 
-| Default value | Type | CLI example |
-|---|---|---|
-| `"hello"` | String (supports `{key}` interpolation) | `-name=Alice` or `-name Alice` |
-| `42` | Integer | `-count=3` |
-| `3.14` | Float | `-lr=0.001` |
-| `False` | Bool flag | `-verbose` or `-verbose=true` |
-| `("a", "b", "c")` | Choice (first is default) | `-mode=b` |
-| `set()` | Positional list | `-files a.txt b.txt` |
+## Precise usage
 
-## Help Strings
-
-Attach a description to any parameter with a two-element tuple:
+Use explicit `FargvParameter` types for full control — descriptions, validation,
+and stream / path / tuple parameters.
 
 ```python
-p, _ = fargv.fargv({
-    "epochs": (10,    "Number of training epochs"),
-    "lr":     (0.001, "Learning rate"),
+import fargv
+
+p, _ = fargv.parse({
+    "data_dir":   fargv.FargvStr("/data",
+                      description="Root input directory"),
+    "output_dir": fargv.FargvStr("{data_dir}/results",
+                      description="Where outputs are written ({data_dir} resolved at parse time)"),
+    "mode":       fargv.FargvChoice(["train", "eval", "test"],
+                      description="Run mode"),
+    "verbose":    fargv.FargvBool(False,
+                      description="Enable verbose logging"),
+    "files":      fargv.FargvPositional([],
+                      description="Input files (positional)"),
 })
 ```
 
-Run with `-help` to print the generated help message.
+The CLI behaviour is identical to the lazy version; the explicit form adds
+per-parameter descriptions in `--help` and makes the intent clearer for
+larger scripts.
 
-## Built-in Parameters
+## Using fargv from bash
 
-Every script automatically gets:
-
-| Parameter | Short | Description |
-|---|---|---|
-| `-help` | `-h` | Print help and exit |
-| `-bash_autocomplete` | | Print bash autocomplete script |
-| `-v` | | Verbosity level |
-
-## String Interpolation
-
-```python
-p, _ = fargv.fargv({
-    "base": "/tmp",
-    "out":  "{base}/results",   # resolved to /tmp/results
-})
-```
-
-## Environment Variable Override
+`python -m fargv` calls any Python callable directly from the shell —
+types and defaults are inferred from the function's signature automatically,
+with no wrapper code required.
 
 ```bash
-count=42 python myscript.py   # overrides the default for 'count'
+python -m fargv numpy.linspace --help
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 ```
+
+![fargv bash demo](docs/_static/fargv_bash.png)
 
 ## Comparison with other argument parsers
 
@@ -110,18 +106,53 @@ count=42 python myscript.py   # overrides the default for 'count'
 
 ✅ built-in  · 🟡 available with extra work or plugins  · ❌ not supported
 
-## Using fargv from bash
-
-`python -m fargv` lets you call any Python callable directly from the shell —
-types and defaults are inferred from the function signature automatically.
-
-```bash
-python -m fargv numpy.linspace --help
-python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
-```
-
-![fargv bash demo](docs/_static/fargv_bash.png)
-
 ## License
 
 MIT
+
+---
+
+## Legacy usage (v < 0.1.9)
+
+The original API uses single-dash flags and a plain dict.  It is still fully
+supported but new scripts should prefer `fargv.parse` above.
+
+```python
+import fargv
+
+p, _ = fargv.fargv({
+    "name":    "world",            # str
+    "count":   1,                  # int
+    "verbose": False,              # bool flag
+    "mode":    ("fast", "slow"),   # choice, first is default
+    "files":   set(),              # positional list
+})
+
+print(f"Hello, {p.name}! count={p.count}")
+```
+
+Both assignment and space-separated forms are accepted:
+
+```bash
+python myscript.py -name=Alice -count=3 -verbose -mode=slow -files a.txt b.txt c.txt
+python myscript.py -name Alice -count 3 -verbose -mode slow -files a.txt b.txt c.txt
+```
+
+Attach a description with a two-element tuple:
+
+```python
+p, _ = fargv.fargv({
+    "epochs": (10,    "Number of training epochs"),
+    "lr":     (0.001, "Learning rate"),
+})
+```
+
+Built-in legacy parameters:
+
+| Parameter | Short | Description |
+|---|---|---|
+| `-help` | `-h` | Print help and exit |
+| `-bash_autocomplete` | | Print bash autocomplete script |
+| `-v` | | Verbosity level |
+
+String interpolation and env-var override work the same way as in the new API.
