@@ -1,3 +1,16 @@
+"""Legacy single-dash argument parser — the original fargv API.
+
+This module implements the original fargv interface where parameters use
+single-dash ``-name=value`` syntax and types are inferred directly from the
+Python type of the default value in a plain dict.
+
+The primary entry point is :func:`fargv`.  All other functions in this module
+are either helpers or legacy compatibility shims.
+
+.. note::
+   New code should prefer :func:`fargv.parse` (the OO API) which uses
+   standard ``--long`` / ``-s`` Unix-style syntax.
+"""
 import os
 import re
 import sys
@@ -43,6 +56,16 @@ def can_override(standard_args:dict, new_args:dict) -> bool:
 
 
 def override(standard_args:dict, new_args:dict) -> dict:
+    """Override *standard_args* entries with values from *new_args*.
+
+    Calls :func:`can_override` first; raises :class:`ValueError` when the
+    validation fails (unknown keys or type mismatches).
+
+    :param standard_args: The base dictionary to update.
+    :param new_args: Key/value pairs to apply on top.
+    :return: A new dict with the merged values.
+    :raises ValueError: If *new_args* contains keys or types not in *standard_args*.
+    """
     if can_override(standard_args, new_args):
         result = standard_args.copy()
         result.update(new_args)

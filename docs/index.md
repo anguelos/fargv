@@ -7,6 +7,7 @@ A very easy to use argument parser for Python scripts.
 :caption: Contents
 
 quickstart
+parameter_types
 api_legacy
 cli
 ```
