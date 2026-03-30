@@ -24,27 +24,62 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from .parameters import (
     FargvError, FargvBoolHelp,
     FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig,
+    FargvUserInterface,
 )
 from .parser import ArgumentParser
 from .type_detection import definition_to_parser
 from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path
 
 
-_AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure"}
+_AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure", "user_interface"}
 
 
 def _is_jupyter() -> bool:
     return "ipykernel" in sys.modules
 
 
+def _run_gui(ui: str, parser) -> None:
+    """Launch the appropriate GUI for *ui* and block until the user closes it.
+
+    Values entered in the GUI are applied to *parser* in-place before
+    returning.  If the framework is unavailable a clear error is raised.
+
+    :param ui:     One of ``"tk"``, ``"qt"``, or ``"jupyter"``.
+    :param parser: The configured :class:`~fargv.parser.ArgumentParser`.
+    :raises RuntimeError: When the requested GUI framework is not installed.
+    """
+    title = getattr(parser, "name", "fargv") or "fargv"
+    if ui == "tk":
+        from .gui_tk import available, show
+        if not available:
+            raise RuntimeError("tkinter is not available in this environment")
+        show(parser, title=title)
+    elif ui == "qt":
+        from .gui_qt import available, show
+        if not available:
+            raise RuntimeError(
+                "No Qt binding found. Install PyQt6, PyQt5, PySide6, or PySide2."
+            )
+        show(parser, title=title)
+    elif ui == "jupyter":
+        from .gui_ipywidgets import available, show
+        if not available:
+            raise RuntimeError(
+                "ipywidgets is not available. Install with: pip install ipywidgets"
+            )
+        show(parser, title=title)
+
+
 def _warn_auto_conflicts(parser, auto_help, auto_bash_autocomplete,
-                          auto_define_verbosity, auto_define_config):
+                          auto_define_verbosity, auto_define_config,
+                          auto_define_user_interface):
     checks = [
-        (auto_help,              "help",             "--help / -h"),
-        (auto_bash_autocomplete, "bash_autocomplete","--bash_autocomplete"),
-        (auto_define_verbosity,  "verbosity",        "--verbosity / -v"),
-        (auto_define_config,     "config",           "--config"),
-        (auto_define_config,     "auto_configure",   "--auto_configure"),
+        (auto_help,                   "help",             "--help / -h"),
+        (auto_bash_autocomplete,      "bash_autocomplete","--bash_autocomplete"),
+        (auto_define_verbosity,       "verbosity",        "--verbosity / -v"),
+        (auto_define_config,          "config",           "--config"),
+        (auto_define_config,          "auto_configure",   "--auto_configure"),
+        (auto_define_user_interface,  "user_interface",   "--user_interface"),
     ]
     for flag, pname, label in checks:
         if flag and pname in parser._name2parameters:
@@ -72,8 +107,34 @@ def _has_proper_program_name(parser) -> bool:
     return stem not in _GENERIC_PROG_NAMES and not stem.startswith("_")
 
 
+
+def _available_ui_choices():
+    """Return the list of UI choices available in the current environment.
+
+    Always starts with ``"cli"``.  ``"tk"`` and ``"qt"`` are appended only
+    when their respective modules report ``available = True``.  ``"jupyter"``
+    is never included here — when running inside a Jupyter kernel the
+    ``--user_interface`` param is suppressed entirely and the UI is forced.
+    """
+    choices = ["cli"]
+    try:
+        from .gui_tk import available as _tk_ok
+        if _tk_ok:
+            choices.append("tk")
+    except Exception:
+        pass
+    try:
+        from .gui_qt import available as _qt_ok
+        if _qt_ok:
+            choices.append("qt")
+    except Exception:
+        pass
+    return choices
+
+
 def _add_auto_params(parser, auto_help, auto_bash_autocomplete,
-                     auto_define_verbosity, auto_define_config):
+                     auto_define_verbosity, auto_define_config,
+                     auto_define_user_interface):
     if auto_help and "help" not in parser._name2parameters:
         parser._add_parameter(FargvHelp(parser))
     if auto_define_verbosity and "verbosity" not in parser._name2parameters:
@@ -88,6 +149,11 @@ def _add_auto_params(parser, auto_help, auto_bash_autocomplete,
             parser._add_parameter(FargvConfig(cfg_default, param_parser=parser, exclude=_AUTO_PARAMS))
         if "auto_configure" not in parser._name2parameters:
             parser._add_parameter(FargvAutoConfig(parser, exclude=_AUTO_PARAMS))
+    if auto_define_user_interface and "user_interface" not in parser._name2parameters:
+        if not _is_jupyter():
+            _ui_choices = _available_ui_choices()
+            if len(_ui_choices) > 1:   # at least one GUI backend available
+                parser._add_parameter(FargvUserInterface(_ui_choices))
 
 
 def _reshape_subcommands(raw: Dict[str, Any], subcommand_return_type: str, return_type: str):
@@ -167,6 +233,7 @@ def parse(
     auto_define_bash_autocomplete: bool = True,
     auto_define_verbosity: bool = True,
     auto_define_config: bool = True,
+    auto_define_user_interface: bool = True,
     colored_help: Optional[bool] = None,
     return_type: Literal["SimpleNamespace", "dict", "namedtuple"] = "SimpleNamespace",
     subcommand_return_type: Literal["flat", "nested", "tuple"] = "flat",
@@ -221,10 +288,6 @@ def parse(
 
     # 1. Resolve UI
     resolved_ui = ui if ui is not None else ("jupyter" if _is_jupyter() else "cli")
-    if resolved_ui != "cli":
-        raise NotImplementedError(
-            f"UI mode {resolved_ui!r} is not yet implemented. Only 'cli' is supported."
-        )
 
     # 2. Build parser
     long_prefix  = "-" if argv_parse_mode == "legacy" else "--"
@@ -234,7 +297,8 @@ def parse(
     if is_pre_built:
         _warn_auto_conflicts(
             definition, auto_define_help, auto_define_bash_autocomplete,
-            auto_define_verbosity, auto_define_config
+            auto_define_verbosity, auto_define_config,
+            auto_define_user_interface
         )
         parser = definition
     else:
@@ -248,7 +312,8 @@ def parse(
 
     # 3. Add auto-params
     _add_auto_params(parser, auto_define_help, auto_define_bash_autocomplete,
-                     auto_define_verbosity, auto_define_config)
+                     auto_define_verbosity, auto_define_config,
+                     auto_define_user_interface)
     parser.allow_default_positional = allow_implied_positionals
 
     # 4. Infer short names, then pre-build help string
@@ -285,9 +350,17 @@ def parse(
         elif _source == "envvar":
             apply_env_vars(user_params, getattr(parser, 'name', 'fargv'))
 
-    # 7. Full CLI parse
+    # 7. CLI parse (always); then optionally launch GUI if --user_interface requests it.
+    # Parsing first means any CLI-supplied values pre-populate the GUI form.
     raw = parser.parse(argv, first_is_name=True,
                        tolerate_unassigned_arguments=tolerate_unassigned_arguments)
+
+    effective_ui = raw.get("user_interface", resolved_ui)
+    if effective_ui == "cli" and resolved_ui in ("tk", "qt", "jupyter"):
+        effective_ui = resolved_ui
+    if effective_ui in ("tk", "qt", "jupyter"):
+        _run_gui(effective_ui, parser)
+        raw = {n: p.value for n, p in parser._name2parameters.items()}
 
     # 8. Reshape subcommands
     sub_items = {k: v for k, v in raw.items()

@@ -13,6 +13,8 @@ Type hierarchy
 │   ├── :class:`FargvHelp`     — prints help and exits (uses on_value_set)
 │   ├── :class:`FargvBashAutocomplete` — prints autocomplete and exits
 │   └── :class:`FargvAutoConfig`        — dumps config JSON and exits
+├── :class:`FargvChoice`       — enum-style choice from a fixed list
+│   └── :class:`FargvUserInterface`   — selects UI mode at runtime
 ├── :class:`FargvStr`          — string with ``{key}`` interpolation
 ├── :class:`FargvChoice`       — enum-style choice from a fixed list
 ├── :class:`FargvPositional`   — ordered list of positional tokens
@@ -28,7 +30,7 @@ Type hierarchy
 """
 from .base import FargvError, FargvParameter, REQUIRED
 from .scalars import FargvInt, FargvFloat, FargvBool, FargvBoolHelp
-from .auto_params import FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig
+from .auto_params import FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig, FargvUserInterface
 from .string import FargvStr
 from .collection import FargvChoice, FargvPositional, FargvPostional
 from .stream import FargvStream, FargvInputStream, FargvOutputStream
