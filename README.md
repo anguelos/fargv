@@ -95,7 +95,7 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false -ui tk
 
 ## Comparison with other argument parsers
 
-| Feature | fargv | argparse | click | typer | fire | docopt |
+| Feature | [fargv](https://github.com/anguelos/fargv) | [argparse](https://docs.python.org/3/library/argparse.html) | [click](https://click.palletsprojects.com/) | [typer](https://typer.tiangolo.com/) | [fire](https://github.com/google/python-fire) | [docopt](http://docopt.org/) |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Zero boilerplate | ✅ | ❌ | 🟡 | 🟡 | ✅ | 🟡 |
 | Type inference from defaults | ✅ | ❌ | ❌ | ❌ | 🟡 | ❌ |
