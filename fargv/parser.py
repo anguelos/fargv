@@ -8,7 +8,7 @@ import sys
 from typing import Dict, Optional, List, Union, Any, Set
 from .parameters import FargvError, FargvParameter, FargvPositional, FargvBoolHelp
 from .global_guessing import guess_program_name
-from .ansi import bold_white, is_colored
+from .ansi import bold_white, gray, is_colored
 
 
 class ArgumentParser:
@@ -71,6 +71,7 @@ class ArgumentParser:
         self.long_prefix  = long_prefix
         self.short_prefix = short_prefix
         self.name = progname if progname is not None else guess_program_name(level=1)
+        self.program_doc: str = ""
         for param in (
             ([parameters] if isinstance(parameters, FargvParameter) else (parameters or []))
             if not isinstance(parameters, dict) else parameters.items()
@@ -370,7 +371,15 @@ class ArgumentParser:
         """
         c    = is_colored(colored)
         prog = getattr(self, "name", os.path.basename(sys.argv[0]))
-        lines = [bold_white(f"Usage: {prog} [OPTIONS]", colored=c), ""]
+        lines = [bold_white(f"Help for {prog}", colored=c), ""]
+        if self.program_doc:
+            import textwrap
+            header = bold_white("__doc__:", colored=c)
+            body   = textwrap.indent(self.program_doc, "  ")
+            if c:
+                body = gray(body, colored=True)
+            lines += [header, body, ""]
+        lines += [bold_white(f"Usage: {prog} [OPTIONS]", colored=c), ""]
         for param in self._name2parameters.values():
             lines.append(param.docstring(colored=c))
         return "\n".join(lines)

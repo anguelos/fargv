@@ -10,8 +10,20 @@ select = ["E", "F", "W"]
 
 [tool.coverage.run]
 source = ["fargv"]
+omit = [
+    "*/gui_tk.py",
+    "*/gui_qt.py",
+    "*/gui_ipywidgets.py",
+    "*/ipywidgets.py",
+]
 [tool.coverage.report]
 exclude_lines = [
     "def main_",
     "pragma: no cover",
+]
+omit = [
+    "*/gui_tk.py",
+    "*/gui_qt.py",
+    "*/gui_ipywidgets.py",
+    "*/ipywidgets.py",
 ]

@@ -5,7 +5,8 @@
       "Bash(python:*)",
       "Bash(make test:*)",
       "Bash(make unittest:*)",
-      "Bash(make htmldoc:*)"
+      "Bash(make htmldoc:*)",
+      "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/test/unittest/*.py)"
     ]
   }
 }

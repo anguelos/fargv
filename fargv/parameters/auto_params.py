@@ -14,6 +14,7 @@ dicts to override defaults::
 import sys
 from .scalars import FargvBool, FargvInt
 from .string import FargvStr
+from .collection import FargvChoice
 
 
 class FargvHelp(FargvBool):
@@ -130,6 +131,35 @@ class FargvConfig(FargvStr):
             sys.stdout.write(dump_config(self._param_parser, exclude=self._exclude))
             sys.stdout.write("\n")
             sys.exit(0)
+
+
+class FargvUserInterface(FargvChoice):
+    """``--user_interface`` choice that selects the UI mode at runtime.
+
+    The available choices are determined at construction time from whichever
+    GUI frameworks are actually importable in the current environment.
+    Only injected by :func:`~fargv.parse._add_auto_params` when at least one
+    GUI backend is available **and** the process is not running inside a
+    Jupyter kernel (where the UI is forced to ``"jupyter"`` automatically).
+
+    :param choices: Ordered list starting with ``"cli"``, followed by the
+        names of available backends (``"tk"``, ``"qt"``).
+    """
+
+    def __init__(self, choices,
+                 name: str = "user_interface",
+                 short_name=None,
+                 description: str = None):
+        """
+        :param choices:     Runtime-detected list, e.g. ``["cli", "tk"]``.
+        :param name:        Long flag name (default ``"user_interface"``).
+        :param short_name:  Single-character alias (default: auto-inferred).
+        :param description: Help text (auto-built from *choices* if omitted).
+        """
+        if description is None:
+            description = "UI mode — available: " + ", ".join(choices)
+        super().__init__(choices, name=name, short_name=short_name,
+                         description=description)
 
 
 class FargvAutoConfig(FargvBool):

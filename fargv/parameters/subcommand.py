@@ -117,6 +117,10 @@ class FargvSubcommand(FargvParameter):
     def parse_subcommand(self, sub_name: str, sub_tokens, long_prefix: str, short_prefix: str) -> dict:
         """Build a parser for *sub_name* and parse *sub_tokens* with it.
 
+        A ``--help`` / ``-h`` flag is automatically injected into every
+        subcommand parser so that ``myscript <sub> --help`` prints the
+        subcommand-specific help and exits.
+
         :param sub_name:     Name of the subcommand to parse.
         :param sub_tokens:   Argv tokens that follow the subcommand token.
         :param long_prefix:  Long flag prefix (e.g. ``"--"``).
@@ -124,11 +128,16 @@ class FargvSubcommand(FargvParameter):
         :return: Parsed namespace dict from the subcommand's parser.
         """
         from ..type_detection import definition_to_parser
+        from .auto_params import FargvHelp
         sub_parser = definition_to_parser(
             self._definitions[sub_name],
             long_prefix=long_prefix,
             short_prefix=short_prefix,
         )
+        sub_parser.name = sub_name
+        if "help" not in sub_parser._name2parameters:
+            sub_parser._add_parameter(FargvHelp(sub_parser))
+        sub_parser.infer_short_names()
         return sub_parser.parse([sub_name] + list(sub_tokens), first_is_name=True)
 
     def ingest_value_strings(self, *values):

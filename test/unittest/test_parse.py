@@ -228,10 +228,14 @@ class TestPositionals:
 # ─────────────────────────────────────── ui guard ──────────────────────────
 
 class TestUIGuard:
-    def test_tk_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            fargv.parse({"x": 1}, given_parameters=["prog"], ui="tk")
+    def test_tk_available_flag(self):
+        from fargv.gui_tk import available
+        assert isinstance(available, bool)
 
-    def test_qt_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            fargv.parse({"x": 1}, given_parameters=["prog"], ui="qt")
+    def test_qt_available_flag(self):
+        from fargv.gui_qt import available
+        assert isinstance(available, bool)
+
+    def test_jupyter_available_flag(self):
+        from fargv.gui_ipywidgets import available
+        assert isinstance(available, bool)

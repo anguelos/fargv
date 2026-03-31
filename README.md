@@ -1,5 +1,7 @@
 # fargv
 
+[![Tests](https://github.com/anguelos/fargv/actions/workflows/tests.yml/badge.svg)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/anguelos/fargv/badges/badges/coverage.json)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/fargv)](https://pypi.org/project/fargv/)
 [![Downloads](https://img.shields.io/pypi/dm/fargv)](https://pypi.org/project/fargv/)
 [![Documentation Status](https://readthedocs.org/projects/fargv/badge/?version=latest)](https://fargv.readthedocs.io/en/latest/)
@@ -83,6 +85,14 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 
 ![fargv bash demo](docs/_static/fargv_bash.png)
 
+The same call with `-ui tk` opens a Tk window instead:
+
+```bash
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false -ui tk
+```
+
+![fargv Tk GUI demo](docs/_static/fargv_linspace_tk.png)
+
 ## Comparison with other argument parsers
 
 | Feature | fargv | argparse | click | typer | fire | docopt |
@@ -96,15 +106,24 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 | String interpolation | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Subcommands | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
 | `python -m pkg.func` invocation | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| Bash tab completion | ✅ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| Bash tab completion | 🟡 | 🟡 | ✅ | ✅ | 🟡 | ❌ |
 | No runtime dependencies | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Environment variable override | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| GUI / widget interface | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | 🟡 | ❌ |
 | Mutually exclusive parameters | ❌ | ✅ | ✅ | ✅ | ❌ | 🟡 |
-| Parameter validation / constraints | ❌ | 🟡 | ✅ | ✅ | ❌ | ❌ |
-| GUI / Jupyter widgets | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Parameter validation / constraints | 🟡 | 🟡 | ✅ | ✅ | ❌ | ❌ |
+| Async command support | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Interactive prompts / password input | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Decorator-based API | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Type-safe return value | 🟡 | ❌ | 🟡 | ✅ | ❌ | ❌ |
 
 ✅ built-in  · 🟡 available with extra work or plugins  · ❌ not supported
+
+**fargv notes:**
+Bash tab completion generates a script via `--bash_autocomplete` that must be sourced manually.
+Parameter validation covers path constraints (`FargvExistingFile`, `FargvNonExistingFile`, `FargvFile`) but not numeric ranges or regex patterns.
+Type-safe return requires passing a dataclass as the definition; the default `SimpleNamespace` is untyped.
 
 ## License
 

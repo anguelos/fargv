@@ -253,6 +253,58 @@ def function_to_parser(
     return parser
 
 
+
+def dataclass_to_parser(
+    cls,
+    long_prefix: str = "--",
+    short_prefix: str = "-",
+) -> ArgumentParser:
+    """Derive an ArgumentParser from a dataclass class.
+
+    Field types are read from :func:`typing.get_type_hints`; defaults come
+    from ``field.default`` or ``field.default_factory()``.  Fields with no
+    default are marked mandatory.  Fields whose type is unrecognisable *and*
+    whose default is ``None`` are skipped (same rule as
+    :func:`function_to_parser`).
+
+    :param cls:          A dataclass **class** (not an instance).
+    :param long_prefix:  Long flag prefix (default ``"--"``).
+    :param short_prefix: Short flag prefix (default ``"-"``).
+    :return: Configured :class:`~fargv.parser.ArgumentParser`.
+    :raises TypeError: When *cls* is not a dataclass class.
+    """
+    import dataclasses as _dc
+    import typing
+    if not (_dc.is_dataclass(cls) and isinstance(cls, type)):
+        raise TypeError(f"dataclass_to_parser requires a dataclass class, got {cls!r}")
+    try:
+        hints = typing.get_type_hints(cls)
+    except Exception:
+        hints = {}
+    parser = ArgumentParser(long_prefix=long_prefix, short_prefix=short_prefix)
+    for field in _dc.fields(cls):
+        name       = field.name
+        annotation = hints.get(name, inspect.Parameter.empty)
+        has_default = (field.default    is not _dc.MISSING
+                       or field.default_factory is not _dc.MISSING)  # type: ignore[misc]
+        if not has_default:
+            fargv_cls   = _annotation_to_fargv_cls(annotation) or FargvStr
+            fargv_param = fargv_cls(REQUIRED, name=name)
+        else:
+            default = (field.default if field.default is not _dc.MISSING
+                       else field.default_factory())  # type: ignore[misc]
+            fargv_cls = _annotation_to_fargv_cls(annotation)
+            if fargv_cls is None and default is None:
+                continue
+            fargv_param = (
+                fargv_cls(default, name=name)
+                if fargv_cls is not None
+                else _infer_param(name, default)
+            )
+        parser._add_parameter(fargv_param)
+    return parser
+
+
 def definition_to_parser(
     definition,
     non_defaults_are_mandatory: bool = False,
@@ -261,6 +313,9 @@ def definition_to_parser(
     short_prefix: str = "-",
 ) -> ArgumentParser:
     """Dispatch definition (dict, ArgumentParser, or callable) to the right converter."""
+    import dataclasses as _dc
+    if _dc.is_dataclass(definition) and isinstance(definition, type):
+        return dataclass_to_parser(definition, long_prefix=long_prefix, short_prefix=short_prefix)
     if isinstance(definition, ArgumentParser):
         return definition
     if isinstance(definition, dict):
