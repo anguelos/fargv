@@ -16,7 +16,9 @@ Return types
 By default :func:`parse` returns a :class:`types.SimpleNamespace`.  Pass
 ``return_type="dict"`` or ``return_type="namedtuple"`` to change this.
 """
+import inspect
 import sys
+import textwrap
 import types
 from collections import namedtuple
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypeVar, Union, overload
@@ -28,12 +30,38 @@ from .parameters import (
 )
 from .parser import ArgumentParser
 from .type_detection import definition_to_parser
+from .ansi import gray, bold_white, is_colored
 from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path
 
 
 _DC = TypeVar("_DC")   # used in @overload signatures for dataclass definitions
 
 _AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure", "user_interface"}
+
+
+def _find_docstring(definition) -> str:
+    """Return the most relevant docstring for *definition*.
+
+    * Callable (function, class, dataclass) → ``definition.__doc__``.
+    * dict / ArgumentParser → walk the call stack looking for the first
+      frame whose module sits outside the fargv package and return its
+      ``__doc__``.
+
+    Returns an empty string when nothing is found.
+    """
+    import dataclasses as _dc
+    if callable(definition) or (_dc.is_dataclass(definition) and isinstance(definition, type)):
+        return (definition.__doc__ or "").strip()
+    # Walk call stack — skip frames that belong to the fargv package itself.
+    fargv_pkg = __name__.rsplit(".", 1)[0]  # "fargv"
+    for frame_info in inspect.stack():
+        mod = frame_info.frame.f_globals.get("__name__", "")
+        if mod == fargv_pkg or mod.startswith(fargv_pkg + "."):
+            continue
+        doc = frame_info.frame.f_globals.get("__doc__") or ""
+        if doc.strip():
+            return doc.strip()
+    return ""
 
 
 def _is_jupyter() -> bool:
@@ -45,31 +73,36 @@ def _run_gui(ui: str, parser) -> None:
 
     Values entered in the GUI are applied to *parser* in-place before
     returning.  If the framework is unavailable a clear error is raised.
+    If the user cancels / aborts the dialog, ``sys.exit(0)`` is called so
+    that the program does not continue with uninitialised parameters.
 
     :param ui:     One of ``"tk"``, ``"qt"``, or ``"jupyter"``.
     :param parser: The configured :class:`~fargv.parser.ArgumentParser`.
     :raises RuntimeError: When the requested GUI framework is not installed.
     """
     title = getattr(parser, "name", "fargv") or "fargv"
+    ok = False
     if ui == "tk":
         from .gui_tk import available, show
         if not available:
             raise RuntimeError("tkinter is not available in this environment")
-        show(parser, title=title)
+        ok = show(parser, title=title)
     elif ui == "qt":
         from .gui_qt import available, show
         if not available:
             raise RuntimeError(
                 "No Qt binding found. Install PyQt6, PyQt5, PySide6, or PySide2."
             )
-        show(parser, title=title)
+        ok = show(parser, title=title)
     elif ui == "jupyter":
         from .gui_ipywidgets import available, show
         if not available:
             raise RuntimeError(
                 "ipywidgets is not available. Install with: pip install ipywidgets"
             )
-        show(parser, title=title)
+        ok = show(parser, title=title)
+    if not ok:
+        sys.exit(0)
 
 
 def _warn_auto_conflicts(parser, auto_help, auto_bash_autocomplete,
@@ -259,6 +292,7 @@ def parse(
     non_defaults_are_mandatory: bool = False,
     fn_def_tolerate_wildcards: bool = False,
     override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
+    employ_docstring_in_help: bool = True,
 ) -> Tuple[Any, str]:
     """Parse CLI arguments using the new OO interface.
 
@@ -295,6 +329,12 @@ def parse(
         overrides earlier ones.  Must start with ``"default"`` and end
         with ``"ui"``; duplicates are rejected.
         Default: ``["default", "config", "envvar", "ui"]``.
+
+    employ_docstring_in_help:
+        When ``True`` (default), the docstring of *definition* (or the
+        calling module when *definition* is a dict) is prepended to the
+        help string under a ``__doc__:`` heading.  Printed in gray when
+        colours are active.
 
     subcommand_return_type:
         "flat" (default) — subcommand params merged into top-level namespace,
@@ -340,6 +380,10 @@ def parse(
 
     # 4. Infer short names, then pre-build help string
     parser.infer_short_names()
+    if employ_docstring_in_help:
+        _doc = _find_docstring(definition)
+        if _doc:
+            parser.program_doc = _doc
     help_str = parser.generate_help_message(colored=colored_help)
 
     # 5. Dict shortcut (bypass CLI)

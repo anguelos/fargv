@@ -31,7 +31,7 @@ def _label(name: str) -> str:
     return name.replace("_", " ").title()
 
 
-def show(parser, title: str = "fargv") -> None:
+def show(parser, title: str = "fargv") -> bool:
     """Render an ipywidgets form for *parser* inside the current Jupyter cell.
 
     Each non-auto parameter is rendered as an appropriate widget:
@@ -164,3 +164,4 @@ def show(parser, title: str = "fargv") -> None:
     form = widgets.VBox([heading] + rows + [btn, out],
                         layout=widgets.Layout(padding="12px"))
     display(form)
+    return True

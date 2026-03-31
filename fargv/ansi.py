@@ -72,3 +72,8 @@ def dim(text, colored=True) -> str:
 def bold_white(text, colored=True) -> str:
     """Return *text* in bold bright-white (used for section headers)."""
     return _s(text, BOLD, BRIGHT_WHITE, colored=colored)
+
+
+def gray(text, colored=True) -> str:
+    """Return *text* in dark gray (used for docstring blocks)."""
+    return _s(text, "\033[90m", colored=colored)

@@ -83,6 +83,14 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 
 ![fargv bash demo](docs/_static/fargv_bash.png)
 
+The same call with `-ui tk` opens a Tk window instead:
+
+```bash
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false -ui tk
+```
+
+![fargv Tk GUI demo](docs/_static/fargv_linspace_tk.png)
+
 ## Comparison with other argument parsers
 
 | Feature | fargv | argparse | click | typer | fire | docopt |

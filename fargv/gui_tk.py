@@ -67,6 +67,20 @@ class _Tooltip:
             self._tip = None
 
 
+def _setup_styles() -> None:
+    """Define named ttk Entry styles for type-validation colour feedback.
+
+    Pending.TEntry  - yellow: parseable but differs from committed value.
+    Invalid.TEntry  - red: text cannot be parsed by the parameter type.
+
+    Called once after the root Tk window is created.
+    On macOS/Aqua the fieldbackground hint may be ignored.
+    """
+    s = ttk.Style()
+    s.configure("Pending.TEntry", fieldbackground="#fff3cd")
+    s.configure("Invalid.TEntry", fieldbackground="#f8d7da")
+
+
 def _attach_tooltip(widget, param):
     lines = []
     if param._description:
@@ -106,12 +120,45 @@ def _make_validator(widget, var, param):
         raw = var.get()
         try:
             t = param._get_class_type()
-            if raw:
-                t(raw)
+            t(raw)
         except (ValueError, TypeError):
             fallback = param._default
             var.set("" if fallback is None else str(fallback))
+        widget.configure(style="TEntry")  # reset colour on leave
     widget.bind("<FocusOut>", _on_focus_out, add="+")
+
+
+def _make_key_validator(widget, var, param) -> None:
+    """Bind <KeyRelease> colour feedback for FargvInt and FargvFloat entries.
+
+    Yellow (Pending.TEntry): parseable but differs from committed value.
+    Red    (Invalid.TEntry): text cannot be parsed by the parameter type.
+    White  (TEntry):         matches the committed value.
+    """
+    from .parameters.scalars import FargvInt, FargvFloat
+    if not isinstance(param, (FargvInt, FargvFloat)):
+        return
+    type_fn = param._get_class_type()
+
+    def _on_key_release(event):
+        raw = var.get().strip()
+        if not raw:
+            widget.configure(style="Pending.TEntry")
+            return
+        # Allow numerically incomplete prefixes mid-typing
+        if (raw in ("-", "+", ".", "-.")
+                or raw[-1] in ("e", "E")
+                or raw[-2:] in ("e-", "e+", "E-", "E+")):
+            widget.configure(style="Pending.TEntry")
+            return
+        try:
+            type_fn(raw)
+            style = "TEntry"  # valid — always clean
+        except (ValueError, TypeError):
+            style = "Invalid.TEntry"
+        widget.configure(style=style)
+
+    widget.bind("<KeyRelease>", _on_key_release, add="+")
 
 
 def _make_var(param):
@@ -143,11 +190,26 @@ def _make_widget(parent, kind, var, param):
     # text
     w = ttk.Entry(parent, textvariable=var)
     _make_validator(w, var, param)
+    _make_key_validator(w, var, param)
     return w
 
 
 def _populate_frame(frame, params, pvars):
-    """Grid label+widget rows for *params* into *frame*, using *pvars* for vars."""
+    """Grid label+widget rows for *params* into *frame*, using *pvars* for vars.
+
+    Column layout:
+      0 - parameter label
+      1 - input widget (entry / checkbutton / combobox)
+      2 - resolved-value preview (FargvStr with {key} macros only)
+    """
+    import re as _re
+    from .parameters.string import FargvStr
+
+    # name -> (tk_var, param, widget) for every string Entry in this frame
+    str_entries = {}
+    # name -> ttk.Label showing the live-resolved value
+    preview_labels = {}
+
     for row, (name, param) in enumerate(params.items()):
         lbl = ttk.Label(frame, text=_fmt_label(name), anchor="w")
         lbl.grid(row=row, column=0, sticky="w", pady=3, padx=(0, 10))
@@ -156,6 +218,43 @@ def _populate_frame(frame, params, pvars):
         w = _make_widget(frame, kind, var, param)
         w.grid(row=row, column=1, sticky="ew", pady=3)
         _attach_tooltip(w, param)
+
+        # Track string Entry widgets; add preview label when macros exist
+        if isinstance(param, FargvStr) and kind == "text":
+            str_entries[name] = (var, param, w)
+            if param.other_string_params:
+                plbl = ttk.Label(frame, text="", foreground="#555555",
+                                 font=("", 9, "italic"), anchor="w")
+                plbl.grid(row=row, column=2, sticky="w", padx=(8, 0), pady=3)
+                preview_labels[name] = plbl
+
+    # Wire live macro-resolution previews
+    if preview_labels:
+        def _update_previews(*_):
+            for pname, plbl in preview_labels.items():
+                svar, sparam, _ = str_entries[pname]
+                raw = svar.get()
+                if "{" not in raw:
+                    plbl.configure(text="")
+                    continue
+
+                def _gui_resolve(match, _p=sparam):
+                    key = match.group(1)
+                    if key in str_entries:
+                        return str_entries[key][0].get()
+                    if key in _p.other_string_params:
+                        return str(_p.other_string_params[key].value)
+                    return "{" + key + "}"
+
+                try:
+                    resolved = _re.sub(r"\{(\w+)\}", _gui_resolve, raw)
+                    plbl.configure(text="\u2192 " + resolved, foreground="#555555")
+                except Exception:
+                    plbl.configure(text="(unresolved)", foreground="#cc0000")
+
+        for _, (_, _, sw) in str_entries.items():
+            sw.bind("<KeyRelease>", _update_previews, add="+")
+        _update_previews()  # initial render
 
 
 # ─────────────────────────────────────────────── show ────────────────────────
@@ -200,6 +299,7 @@ def show(parser, title="fargv"):
 
     # ── root window (must exist before any tk.StringVar / BooleanVar) ────────
     root = tk.Tk()
+    _setup_styles()
 
     # ── create tk vars for parent params ─────────────────────────────────────
     parent_vars = {name: _make_var(param) for name, param in parent_params.items()}
@@ -369,6 +469,9 @@ def show(parser, title="fargv"):
 
     root.bind("<Escape>", lambda _: on_abort())
     root.bind("<F1>",     lambda _: on_help())
+    btn_run  .bind("<Return>", lambda _: on_run())
+    btn_abort.bind("<Return>", lambda _: on_abort())
+    btn_help .bind("<Return>", lambda _: on_help())
     btn_run.focus_set()
 
 
