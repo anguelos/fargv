@@ -106,15 +106,24 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false -ui tk
 | String interpolation | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Subcommands | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 |
 | `python -m pkg.func` invocation | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| Bash tab completion | ✅ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| Bash tab completion | 🟡 | 🟡 | ✅ | ✅ | 🟡 | ❌ |
 | No runtime dependencies | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Environment variable override | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | ✅ | ❌ |
+| GUI / widget interface | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| zsh / fish completion | ❌ | 🟡 | ✅ | ✅ | 🟡 | ❌ |
 | Mutually exclusive parameters | ❌ | ✅ | ✅ | ✅ | ❌ | 🟡 |
-| Parameter validation / constraints | ❌ | 🟡 | ✅ | ✅ | ❌ | ❌ |
-| GUI / Jupyter widgets | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Parameter validation / constraints | 🟡 | 🟡 | ✅ | ✅ | ❌ | ❌ |
+| Async command support | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Interactive prompts / password input | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Decorator-based API | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Type-safe return value | 🟡 | ❌ | 🟡 | ✅ | ❌ | ❌ |
 
 ✅ built-in  · 🟡 available with extra work or plugins  · ❌ not supported
+
+**fargv notes:**
+Bash tab completion generates a script via `--bash_autocomplete` that must be sourced manually.
+Parameter validation covers path constraints (`FargvExistingFile`, `FargvNonExistingFile`, `FargvFile`) but not numeric ranges or regex patterns.
+Type-safe return requires passing a dataclass as the definition; the default `SimpleNamespace` is untyped.
 
 ## License
 
