@@ -1,5 +1,7 @@
 # fargv
 
+[![Tests](https://github.com/anguelos/fargv/actions/workflows/tests.yml/badge.svg)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/anguelos/fargv/badges/badges/coverage.json)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/fargv)](https://pypi.org/project/fargv/)
 [![Downloads](https://img.shields.io/pypi/dm/fargv)](https://pypi.org/project/fargv/)
 [![Documentation Status](https://readthedocs.org/projects/fargv/badge/?version=latest)](https://fargv.readthedocs.io/en/latest/)
