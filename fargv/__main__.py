@@ -115,9 +115,20 @@ def _call_target(target, target_spec: str, rest_argv: list) -> None:
         sys.stderr.write(f"fargv: {exc}\n")
         sys.exit(1)
 
-    import ast
+    import ast, inspect as _inspect
+    sig = _inspect.signature(target)
+    has_var_kw = any(
+        p.kind == _inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+    )
+    fn_names = None if has_var_kw else {
+        n for n, p in sig.parameters.items()
+        if p.kind not in (_inspect.Parameter.VAR_POSITIONAL, _inspect.Parameter.VAR_KEYWORD)
+    }
     kwargs = {}
     for k, v in vars(p).items():
+        if fn_names is not None and k not in fn_names:
+            continue
         if isinstance(v, str):
             try:
                 v = ast.literal_eval(v)

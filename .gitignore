@@ -1,3 +1,6 @@
+#asciinema recordings
+*.cast
+
 # Editors
 .vscode/
 .idea/
@@ -123,3 +126,6 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Trunk
+.trunk/

@@ -68,9 +68,9 @@ class FargvInt(FargvParameter):
                 return list(values)
         return super().ingest_value_strings(*values)
 
-    def docstring(self, colored=None) -> str:
+    def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string, appending a count-switch note when relevant."""
-        base = super().docstring(colored=colored)
+        base = super().docstring(colored=colored, verbosity=verbosity)
         if self.is_count_switch:
             from ..ansi import dim, is_colored
             return base + dim("  (repeatable short flag: -vvv = 3)", colored=is_colored(colored))

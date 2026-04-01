@@ -14,6 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,7 +31,7 @@ jobs:
         run: python -m pytest test/unittest/ -q --cov=fargv --cov-report=term-missing --cov-report=json --cov-branch
 
       - name: Update coverage badge
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
           TOTAL=$(python -c "import json; d=json.load(open('coverage.json')); print(round(d['totals']['percent_covered']))")
           if   [ "$TOTAL" -ge 90 ]; then COLOR=brightgreen

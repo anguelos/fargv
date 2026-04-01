@@ -93,10 +93,10 @@ class FargvPath(FargvParameter):
         self._value = path
         return path
 
-    def docstring(self, colored=None) -> str:
+    def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string including any active path constraints."""
         from ..ansi import dim, is_colored
-        base = super().docstring(colored=colored)
+        base = super().docstring(colored=colored, verbosity=verbosity)
         constraints = []
         if self.must_exist:
             constraints.append("must exist")

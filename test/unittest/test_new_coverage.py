@@ -273,22 +273,6 @@ def test_fargv_config_on_value_set_nonempty():
     FargvConfig("/some/path.json").on_value_set("/some/path.json")
 
 
-def test_fargv_auto_config_on_value_set_true(capsys):
-    from fargv.parameters.auto_params import FargvAutoConfig
-    from fargv.parser import ArgumentParser
-    from fargv.parameters import FargvInt
-    parser = ArgumentParser()
-    parser._add_parameter(FargvInt(5, name="x"))
-    with pytest.raises(SystemExit):
-        FargvAutoConfig(parser).on_value_set(True)
-    assert "x" in capsys.readouterr().out
-
-
-def test_fargv_auto_config_on_value_set_false():
-    from fargv.parameters.auto_params import FargvAutoConfig
-    from fargv.parser import ArgumentParser
-    FargvAutoConfig(ArgumentParser()).on_value_set(False)
-
 
 # ===========================================================================
 # type_detection: dataclass

@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypeVar,
 
 from .parameters import (
     FargvError, FargvBoolHelp,
-    FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvAutoConfig,
+    FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig,
     FargvUserInterface,
 )
 from .parser import ArgumentParser
@@ -36,7 +36,7 @@ from .config import default_config_path, load_config, apply_config, apply_env_va
 
 _DC = TypeVar("_DC")   # used in @overload signatures for dataclass definitions
 
-_AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "auto_configure", "user_interface"}
+_AUTO_PARAMS = {"help", "verbosity", "bash_autocomplete", "config", "user_interface"}
 
 
 def _find_docstring(definition) -> str:
@@ -113,7 +113,6 @@ def _warn_auto_conflicts(parser, auto_help, auto_bash_autocomplete,
         (auto_bash_autocomplete,      "bash_autocomplete","--bash_autocomplete"),
         (auto_define_verbosity,       "verbosity",        "--verbosity / -v"),
         (auto_define_config,          "config",           "--config"),
-        (auto_define_config,          "auto_configure",   "--auto_configure"),
         (auto_define_user_interface,  "user_interface",   "--user_interface"),
     ]
     for flag, pname, label in checks:
@@ -176,14 +175,12 @@ def _add_auto_params(parser, auto_help, auto_bash_autocomplete,
         parser._add_parameter(FargvVerbosity())
     if auto_bash_autocomplete and "bash_autocomplete" not in parser._name2parameters:
         parser._add_parameter(FargvBashAutocomplete(parser))
-    if auto_define_config and _has_proper_program_name(parser):
-        if "config" not in parser._name2parameters:
-            cfg_default = str(default_config_path(
-                getattr(parser, "name", "fargv")
-            ))
-            parser._add_parameter(FargvConfig(cfg_default, param_parser=parser, exclude=_AUTO_PARAMS))
-        if "auto_configure" not in parser._name2parameters:
-            parser._add_parameter(FargvAutoConfig(parser, exclude=_AUTO_PARAMS))
+    if auto_define_config and "config" not in parser._name2parameters:
+        if _has_proper_program_name(parser):
+            cfg_default = str(default_config_path(getattr(parser, "name", "fargv")))
+        else:
+            cfg_default = ""   # no stable app name — user must supply --config explicitly
+        parser._add_parameter(FargvConfig(cfg_default, param_parser=parser, exclude=_AUTO_PARAMS))
     if auto_define_user_interface and "user_interface" not in parser._name2parameters:
         if not _is_jupyter():
             _ui_choices = _available_ui_choices()
@@ -321,7 +318,7 @@ def parse(
         Silently discard leftovers with no positional to receive them.
 
     auto_define_config:
-        Inject ``--config <path>`` and ``--auto_configure`` parameters.
+        Inject ``--config <path>`` parameter.
         Default config path: ``~/.{app_name}.config.json``.
 
     override_order:
@@ -397,9 +394,11 @@ def parse(
                 raise FargvError(f"Required parameter {pname!r} was not provided")
         raw = {n: p.value for n, p in parser._name2parameters.items()}
         raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
-        result_raw = {k: v for k, v in raw.items() if k not in _AUTO_PARAMS}
+        result_raw = {k: v for k, v in raw.items() if not parser._name2parameters[k].filter_out}
         if _dc_cls is not None:
-            return _dc_cls(**result_raw), help_str
+            import dataclasses as _dc2
+            _dc_field_names = {f.name for f in _dc2.fields(_dc_cls)}
+            return _dc_cls(**{k: v for k, v in result_raw.items() if k in _dc_field_names}), help_str
         if return_type == "namespace":
             from .namespace import FargvNamespace
             return FargvNamespace({k: parser._name2parameters[k] for k in result_raw}), help_str
@@ -416,6 +415,9 @@ def parse(
             if raw_config_path is None:
                 raw_config_path = parser._name2parameters.get("config", None)
                 raw_config_path = raw_config_path._value if raw_config_path else None
+            if raw_config_path:
+                from .config import init_config_if_missing
+                init_config_if_missing(raw_config_path, parser, exclude=_AUTO_PARAMS)
             cfg = load_config(raw_config_path)
             apply_config(user_params, cfg, raw_config_path)
         elif _source == "envvar":
@@ -439,7 +441,7 @@ def parse(
     if sub_items and subcommand_return_type == "tuple":
         sub_key, sub_val = next(iter(sub_items.items()))
         parent_dict = {k: v for k, v in raw.items()
-                       if k not in sub_items and k not in _AUTO_PARAMS}
+                       if k not in sub_items and not parser._name2parameters[k].filter_out}
         return (
             sub_val["name"],
             _wrap(sub_val["result"], return_type),
@@ -447,10 +449,154 @@ def parse(
         ), help_str
 
     raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
-    result_raw = {k: v for k, v in raw.items() if k not in _AUTO_PARAMS}
+    result_raw = {k: v for k, v in raw.items() if not parser._name2parameters[k].filter_out}
     if _dc_cls is not None:
-        return _dc_cls(**result_raw), help_str
+        import dataclasses as _dc2
+        _dc_field_names = {f.name for f in _dc2.fields(_dc_cls)}
+        return _dc_cls(**{k: v for k, v in result_raw.items() if k in _dc_field_names}), help_str
     if return_type == "namespace":
         from .namespace import FargvNamespace
         return FargvNamespace({k: parser._name2parameters[k] for k in result_raw}), help_str
     return _wrap(result_raw, return_type), help_str
+
+
+def _filter_to_fn_params(fn: Callable, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Return *params* restricted to the keyword arguments *fn* actually declares.
+
+    Auto-params injected by fargv (``verbosity``, ``config``, ...) are dropped
+    unless *fn* has a ``**kwargs`` catch-all.
+
+    :param fn:     The callable that will be invoked.
+    :param params: Full ``{name: value}`` dict from :func:`parse`.
+    :return:       Filtered dict safe to unpack as ``fn(**filtered)``.
+    """
+    sig = inspect.signature(fn)
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return params   # fn accepts **kwargs — pass everything through
+    fn_names = {
+        n for n, p in sig.parameters.items()
+        if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    }
+    return {k: v for k, v in params.items() if k in fn_names}
+
+
+def parse_and_launch(
+    fn: Callable,
+    given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
+    argv_parse_mode: Literal["legacy", "unix"] = "unix",
+    allow_implied_positionals: bool = True,
+    tolerate_unassigned_arguments: bool = False,
+    ui: Optional[Literal["cli", "tk", "qt", "jupyter"]] = None,
+    auto_define_help: bool = True,
+    auto_define_bash_autocomplete: bool = True,
+    auto_define_verbosity: bool = True,
+    auto_define_config: bool = True,
+    auto_define_user_interface: bool = True,
+    colored_help: Optional[bool] = None,
+    subcommand_return_type: Literal["flat", "nested", "tuple"] = "flat",
+    non_defaults_are_mandatory: bool = False,
+    fn_def_tolerate_wildcards: bool = False,
+    override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
+    employ_docstring_in_help: bool = True,
+) -> Any:
+    """Parse CLI arguments inferred from *fn*'s signature, then call *fn*.
+
+    Equivalent to ``p, _ = parse(fn, ...); return fn(**p)``.
+    ``return_type`` is always ``"dict"`` internally so auto-params are
+    filtered before the call.
+
+    :param fn: Callable whose signature defines the parameters.
+    :return:   The return value of *fn*.
+    """
+    params, _ = parse(
+        fn,
+        given_parameters=given_parameters,
+        argv_parse_mode=argv_parse_mode,
+        allow_implied_positionals=allow_implied_positionals,
+        tolerate_unassigned_arguments=tolerate_unassigned_arguments,
+        ui=ui,
+        auto_define_help=auto_define_help,
+        auto_define_bash_autocomplete=auto_define_bash_autocomplete,
+        auto_define_verbosity=auto_define_verbosity,
+        auto_define_config=auto_define_config,
+        auto_define_user_interface=auto_define_user_interface,
+        colored_help=colored_help,
+        subcommand_return_type=subcommand_return_type,
+        non_defaults_are_mandatory=non_defaults_are_mandatory,
+        fn_def_tolerate_wildcards=fn_def_tolerate_wildcards,
+        override_order=override_order,
+        employ_docstring_in_help=employ_docstring_in_help,
+        return_type="dict",
+    )
+    return fn(**_filter_to_fn_params(fn, params))
+
+
+def parse_here(
+    given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
+    argv_parse_mode: Literal["legacy", "unix"] = "unix",
+    allow_implied_positionals: bool = True,
+    tolerate_unassigned_arguments: bool = False,
+    ui: Optional[Literal["cli", "tk", "qt", "jupyter"]] = None,
+    auto_define_help: bool = True,
+    auto_define_bash_autocomplete: bool = True,
+    auto_define_verbosity: bool = True,
+    auto_define_config: bool = True,
+    auto_define_user_interface: bool = True,
+    colored_help: Optional[bool] = None,
+    subcommand_return_type: Literal["flat", "nested", "tuple"] = "flat",
+    non_defaults_are_mandatory: bool = False,
+    fn_def_tolerate_wildcards: bool = False,
+    override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
+    employ_docstring_in_help: bool = True,
+    return_type: Literal["SimpleNamespace", "dict", "namedtuple", "namespace"] = "SimpleNamespace",
+) -> Tuple[Any, str]:
+    """Parse CLI arguments inferred from the *calling* function's signature.
+
+    Must be called from inside a named function.  Raises :exc:`RuntimeError`
+    when called at module level or when the calling function cannot be resolved.
+
+    :return: ``(namespace, help_str)`` -- same as :func:`parse`.
+    :raises RuntimeError: When called outside a function.
+    """
+    frame_info = inspect.stack()[1]
+    fn_name = frame_info.frame.f_code.co_name
+    if fn_name == "<module>":
+        raise RuntimeError(
+            "parse_here() must be called inside a function, not at module level. "
+            "Use parse() directly instead."
+        )
+    frame = frame_info.frame
+    fn = frame.f_globals.get(fn_name)
+    if fn is None:
+        self_obj = frame.f_locals.get("self")
+        if self_obj is not None:
+            fn = getattr(type(self_obj), fn_name, None)
+    if fn is None:
+        cls_obj = frame.f_locals.get("cls")
+        if cls_obj is not None:
+            fn = getattr(cls_obj, fn_name, None)
+    if fn is None or not callable(fn):
+        raise RuntimeError(
+            f"parse_here() could not resolve the calling function '{fn_name}'. "
+            "Use parse(fn) explicitly."
+        )
+    return parse(
+        fn,
+        given_parameters=given_parameters,
+        argv_parse_mode=argv_parse_mode,
+        allow_implied_positionals=allow_implied_positionals,
+        tolerate_unassigned_arguments=tolerate_unassigned_arguments,
+        ui=ui,
+        auto_define_help=auto_define_help,
+        auto_define_bash_autocomplete=auto_define_bash_autocomplete,
+        auto_define_verbosity=auto_define_verbosity,
+        auto_define_config=auto_define_config,
+        auto_define_user_interface=auto_define_user_interface,
+        colored_help=colored_help,
+        subcommand_return_type=subcommand_return_type,
+        non_defaults_are_mandatory=non_defaults_are_mandatory,
+        fn_def_tolerate_wildcards=fn_def_tolerate_wildcards,
+        override_order=override_order,
+        employ_docstring_in_help=employ_docstring_in_help,
+        return_type=return_type,
+    )

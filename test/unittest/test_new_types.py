@@ -363,22 +363,22 @@ class TestFargvSubcommandUnit:
 
     def test_split_argv_positional(self):
         s = self._make_sub()
-        parent, name, sub = s.split_argv(["--lr=0.1", "train", "--lr=0.5"], "--", "cmd")
+        name, remaining = s.split_argv(["--lr=0.1", "train", "--lr=0.5"], "--", "cmd")
         assert name == "train"
-        assert "--lr=0.1" in parent
-        assert "--lr=0.5" in sub
+        assert "--lr=0.1" in remaining
+        assert "--lr=0.5" in remaining
 
     def test_split_argv_flag_style(self):
         s = self._make_sub()
-        parent, name, sub = s.split_argv(["--cmd=eval", "--dataset=test"], "--", "cmd")
+        name, remaining = s.split_argv(["--cmd=eval", "--dataset=test"], "--", "cmd")
         assert name == "eval"
-        assert "--dataset=test" in sub
+        assert "--dataset=test" in remaining
 
     def test_split_argv_no_match(self):
         s = self._make_sub()
-        parent, name, sub = s.split_argv(["--lr=0.1"], "--", "cmd")
+        name, remaining = s.split_argv(["--lr=0.1"], "--", "cmd")
         assert name is None
-        assert parent == ["--lr=0.1"]
+        assert remaining == ["--lr=0.1"]
 
     def test_split_argv_unknown_flag_raises(self):
         s = self._make_sub()
@@ -453,6 +453,44 @@ class TestFargvSubcommandParser:
         result = p.parse(["prog", "--verbose=2", "train"])
         assert result["verbose"] == 2
         assert result["cmd"]["name"] == "train"
+
+    def test_free_ordering_parent_flag_after_subcommand(self):
+        """Parent flag may appear after the subcommand token."""
+        p = ArgumentParser()
+        p._add_parameter(FargvInt(0, name="verbose"))
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        result = p.parse(["prog", "train", "--lr=0.5", "--verbose=3"])
+        assert result["cmd"]["name"] == "train"
+        assert result["cmd"]["result"]["lr"] == pytest.approx(0.5)
+        assert result["verbose"] == 3
+
+    def test_free_ordering_parent_flag_before_subcommand(self):
+        """Parent flag may appear before the subcommand token (existing behaviour)."""
+        p = ArgumentParser()
+        p._add_parameter(FargvInt(0, name="verbose"))
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}},
+            name="cmd",
+        ))
+        result = p.parse(["prog", "--verbose=2", "train", "--lr=0.5"])
+        assert result["verbose"] == 2
+        assert result["cmd"]["result"]["lr"] == pytest.approx(0.5)
+
+    def test_free_ordering_interleaved(self):
+        """Parent and subcommand flags may be freely interleaved."""
+        p = ArgumentParser()
+        p._add_parameter(FargvInt(0, name="verbose"))
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01, "epochs": 5}},
+            name="cmd",
+        ))
+        result = p.parse(["prog", "--lr=0.5", "train", "--verbose=1", "--epochs=20"])
+        assert result["verbose"] == 1
+        assert result["cmd"]["result"]["lr"] == pytest.approx(0.5)
+        assert result["cmd"]["result"]["epochs"] == 20
 
 
 # ---------------------------------------------------------------------------
@@ -578,3 +616,66 @@ class TestDefaultConfigPath:
     def test_hyphen_to_underscore(self):
         result = default_config_path("my-prog")
         assert "my_prog" in result.name
+
+
+class TestSubcommandConfig:
+    def test_config_applied_to_all_subcommands(self):
+        """apply_config sets defaults on all sub-parsers simultaneously."""
+        from fargv.config import apply_config
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01, "epochs": 5}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        sub_param = p._name2parameters["cmd"]
+        sub_param._ensure_sub_parsers()
+
+        apply_config(
+            p._name2parameters,
+            {"cmd": {"train": {"lr": 0.5, "epochs": 20}, "eval": {"dataset": "test"}}},
+            config_path=None,
+        )
+
+        train_params = sub_param._sub_parsers["train"]._name2parameters
+        eval_params  = sub_param._sub_parsers["eval"]._name2parameters
+        assert train_params["lr"].value    == pytest.approx(0.5)
+        assert train_params["epochs"].value == 20
+        assert eval_params["dataset"].value == "test"
+
+    def test_selected_subcommand_uses_config_default(self):
+        """At parse time, the selected subcommand's config default is used."""
+        from fargv.config import apply_config
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        sub_param = p._name2parameters["cmd"]
+        sub_param._ensure_sub_parsers()
+        apply_config(
+            p._name2parameters,
+            {"cmd": {"train": {"lr": 0.99}}},
+            config_path=None,
+        )
+        result = p.parse(["prog", "train"])
+        assert result["cmd"]["result"]["lr"] == pytest.approx(0.99)
+
+    def test_non_selected_subcommand_config_not_in_result(self):
+        """Config for non-selected subcommand does not appear in the result."""
+        from fargv.config import apply_config
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        sub_param = p._name2parameters["cmd"]
+        sub_param._ensure_sub_parsers()
+        apply_config(
+            p._name2parameters,
+            {"cmd": {"eval": {"dataset": "test"}}},
+            config_path=None,
+        )
+        result = p.parse(["prog", "train"])
+        # eval's dataset should not bleed into train result
+        assert "dataset" not in result["cmd"]["result"]
+        assert result["cmd"]["name"] == "train"
