@@ -18,7 +18,7 @@ class FargvNameException(Exception):
     pass
 
 
-verbosity = 1
+verbosity = 0
 
 
 def set_verbosity(v):

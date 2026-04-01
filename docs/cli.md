@@ -1,5 +1,20 @@
 # Command Line Reference
 
+## Calling any Python function from the shell
+
+`python -m fargv <module.callable>` invokes any importable Python callable
+directly from the shell.  Parameter types and defaults are inferred from the
+function's signature — no wrapper code needed.
+
+```bash
+python -m fargv numpy.linspace --help
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
+```
+
+![python -m fargv numpy.linspace running in a terminal](_static/fargv_bash.png)
+
+---
+
 ## Legacy API (single-dash)
 
 Scripts using `fargv.fargv` automatically get these parameters:

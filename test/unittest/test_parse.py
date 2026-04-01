@@ -193,13 +193,16 @@ class TestCountSwitch:
 # ─────────────────────────────────────── auto-params stripped ──────────────
 
 class TestAutoParamsStripped:
+    """help and bash_autocomplete are filtered (filter_out=True).
+    verbosity, config, user_interface are NOT filtered — they are useful to callers.
+    """
     def test_help_not_in_result(self):
         ns, _ = fargv.parse({"x": 1}, given_parameters=["prog"])
         assert not hasattr(ns, "help")
 
-    def test_verbosity_not_in_result(self):
+    def test_verbosity_in_result(self):
         ns, _ = fargv.parse({"x": 1}, given_parameters=["prog"])
-        assert not hasattr(ns, "verbosity")
+        assert hasattr(ns, "verbosity")
 
     def test_bash_autocomplete_not_in_result(self):
         ns, _ = fargv.parse({"x": 1}, given_parameters=["prog"])

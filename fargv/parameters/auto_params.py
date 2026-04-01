@@ -35,6 +35,8 @@ class FargvHelp(FargvBool):
         :param description:  Help text.
         """
         super().__init__(False, name=name, short_name=short_name, description=description)
+        self.filter_out = True
+        self.is_auto    = True
         self._param_parser = param_parser
 
     def on_value_set(self, value) -> None:
@@ -60,6 +62,7 @@ class FargvVerbosity(FargvInt):
         """
         super().__init__(0, name=name, short_name=short_name,
                          description=description, is_count_switch=True)
+        self.is_auto = True
 
     def on_value_set(self, value) -> None:
         """Update the global verbosity level whenever the counter changes."""
@@ -83,6 +86,8 @@ class FargvBashAutocomplete(FargvBool):
         :param description:  Help text.
         """
         super().__init__(False, name=name, description=description)
+        self.filter_out = True
+        self.is_auto    = True
         self._param_parser = param_parser
 
     def on_value_set(self, value) -> None:
@@ -121,6 +126,7 @@ class FargvConfig(FargvStr):
         :param exclude:      Parameter names to omit from the config dump.
         """
         super().__init__(path, name=name, description=description)
+        self.is_auto       = True
         self._param_parser = param_parser
         self._exclude = exclude or set()
 
@@ -160,35 +166,7 @@ class FargvUserInterface(FargvChoice):
             description = "UI mode — available: " + ", ".join(choices)
         super().__init__(choices, name=name, short_name=short_name,
                          description=description)
+        self.filter_out = True
+        self.is_auto    = True
 
 
-class FargvAutoConfig(FargvBool):
-    """``--auto_configure`` flag that dumps the current config as JSON and exits.
-
-    Automatically injected by :func:`~fargv.parse._add_auto_params` when
-    ``auto_define_config=True`` and the program has a proper name.  The dump
-    reflects coded defaults overlaid with any config-file values already
-    applied — it is suitable for saving as a starter config file.
-    """
-
-    def __init__(self, param_parser, exclude=None, name: str = "auto_configure",
-                 description: str = "Print current config as JSON to stdout and exit"):
-        """
-        :param param_parser: The :class:`~fargv.parser.ArgumentParser` whose
-            parameters are serialised.
-        :param exclude:      Set of parameter names to omit from the dump
-            (typically the auto-params themselves).
-        :param name:         Long flag name (default ``"auto_configure"``).
-        :param description:  Help text.
-        """
-        super().__init__(False, name=name, description=description)
-        self._param_parser = param_parser
-        self._exclude = exclude or set()
-
-    def on_value_set(self, value) -> None:
-        """Dump the current parameter values as JSON and exit when *value* is ``True``."""
-        if value:
-            from ..config import dump_config
-            sys.stdout.write(dump_config(self._param_parser, exclude=self._exclude))
-            sys.stdout.write("\n")
-            sys.exit(0)

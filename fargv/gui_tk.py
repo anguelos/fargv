@@ -501,10 +501,10 @@ def show_namespace(namespace, title="fargv"):
         _name2parameters = params
         name = title
 
-        def generate_help_message(self, colored=None):
+        def generate_help_message(self, colored=None, verbosity=None):
             lines = [f"Usage: {title} [OPTIONS]", ""]
             for param in params.values():
-                lines.append(param.docstring(colored=colored))
+                lines.append(param.docstring(colored=colored, verbosity=verbosity))
             return "\n".join(lines)
 
         def infer_short_names(self):

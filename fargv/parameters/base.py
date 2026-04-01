@@ -61,13 +61,19 @@ class FargvParameter(ABC):
     """
 
     def __init__(self, default: Any = None, name: Optional[str] = None,
-                 short_name: Optional[str] = None, description: Optional[str] = None) -> None:
+                 short_name: Optional[str] = None, description: Optional[str] = None,
+                 filter_out: bool = False) -> None:
         """Initialise a parameter.
 
         :param default:     Default value, or :data:`REQUIRED` for mandatory parameters.
         :param name:        Long parameter name (without leading ``--``).
         :param short_name:  Single-character short alias (without leading ``-``).
         :param description: Help text shown in ``--help`` output.
+        :param filter_out:  When ``True``, this parameter is excluded from the
+                            result namespace returned by :func:`~fargv.parse.parse`.
+                            Used by infrastructure params (``--help``,
+                            ``--bash_autocomplete``) whose value is never needed
+                            by application code.
         """
         super().__init__()
         self._name        = name
@@ -77,6 +83,8 @@ class FargvParameter(ABC):
         self._default     = None if self._mandatory else default
         self._value       = None if self._mandatory else default
         self._env_var_name: Optional[str] = None
+        self.filter_out   = filter_out
+        self.is_auto      = False
 
     def set_name(self, name: str):
         """Set the parameter's long name after construction.
@@ -197,28 +205,38 @@ class FargvParameter(ABC):
 
     # ── Help / documentation ───────────────────────────────────────────────
 
-    def docstring(self, colored=None) -> str:
+    def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string for use in ``--help`` output.
 
         The line includes the long name, optional short alias, type hint,
         description, and default value, optionally coloured with ANSI codes.
 
-        :param colored: ``True``/``False``/``None`` (auto-detect TTY).
+        :param colored:   ``True``/``False``/``None`` (auto-detect TTY).
+        :param verbosity: When ``None`` the global verbosity from
+                          :func:`~fargv.util.get_verbosity` is used.
+                          Description and env-var hint are shown only when
+                          ``verbosity > 0``.
         :return: Formatted help line string.
         """
-        from ..ansi import bold, cyan, green, yellow_bold, is_colored
+        from ..ansi import bold, cyan, green, yellow_bold, dim, gray, is_colored
+        from ..util import get_verbosity
+        if verbosity is None:
+            verbosity = get_verbosity()
         c = is_colored(colored)
         name_str  = bold(f"--{self._name}", colored=c)
         short_str = (f", {bold(f'-{self._short_name}', colored=c)}"
                      if self._short_name is not None else "")
-        type_str  = cyan(f"<{self._get_class_type().__name__}>", colored=c)
+        _tname    = self._get_class_type().__name__
+        _tsuffix  = "(auto)" if self.is_auto else ""
+        type_str  = cyan(f"<{_tname}{_tsuffix}>", colored=c)
         if self._mandatory:
             default_str = yellow_bold("REQUIRED", colored=c)
         else:
             default_str = green(repr(self._default), colored=c)
-        desc_str = self._description if self._description is not None else ""
-        env_str  = (f"  [env: {self._env_var_name}]"
-                    if self._env_var_name is not None else "")
+        desc_str = (dim(self._description, colored=c)
+                    if self._description is not None and verbosity > 0 else "")
+        env_str  = (gray(f"  [env: {self._env_var_name}]", colored=c)
+                    if self._env_var_name is not None and verbosity > 0 else "")
         return f"  {name_str}{short_str} {type_str}  {desc_str}  [default: {default_str}]{env_str}"
 
     # ── Parsing ────────────────────────────────────────────────────────────

@@ -150,10 +150,10 @@ class FargvTuple(FargvParameter):
         self._value = self._parse_string(str(val))
         return self._value
 
-    def docstring(self, colored=None) -> str:
+    def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string including element types and optional flag."""
         from ..ansi import dim, is_colored
-        base = super().docstring(colored=colored)
+        base = super().docstring(colored=colored, verbosity=verbosity)
         inner = ", ".join(t.__name__ for t in self._element_types)
         note = f"  syntax: ({inner})" + (" or '()' for None" if self._optional else "")
         return base + dim(note, colored=is_colored(colored))

@@ -16,7 +16,7 @@ A very easy to use argument parser for Python scripts.
 pip install fargv
 ```
 
-## Lazy usage
+## Quick start
 
 Pass a plain dict — types, short names, config file, and env-var overrides are
 all inferred automatically.
@@ -46,37 +46,26 @@ Every parameter automatically gets a short flag inferred from its name
 (`-d`, `-o`, `-m`, `-V`, …), `--help` output, bash tab-completion, a config
 file at `~/.myscript.config.json`, and env-var overrides (`MYSCRIPT_MODE=eval`).
 
-## Precise usage
-
-Use explicit `FargvParameter` types for full control — descriptions, validation,
-and stream / path / tuple parameters.
+For full control — descriptions, path validation, stream parameters — pass
+explicit `FargvParameter` objects as dict values:
 
 ```python
-import fargv
-
 p, _ = fargv.parse({
-    "data_dir":   fargv.FargvStr("/data",
-                      description="Root input directory"),
-    "output_dir": fargv.FargvStr("{data_dir}/results",
-                      description="Where outputs are written ({data_dir} resolved at parse time)"),
-    "mode":       fargv.FargvChoice(["train", "eval", "test"],
-                      description="Run mode"),
-    "verbose":    fargv.FargvBool(False,
-                      description="Enable verbose logging"),
-    "files":      fargv.FargvPositional([],
-                      description="Input files (positional)"),
+    "data_dir":   fargv.FargvStr("/data",            description="Root input directory"),
+    "output_dir": fargv.FargvStr("{data_dir}/results",description="Output path ({data_dir} resolved)"),
+    "mode":       fargv.FargvChoice(["train","eval","test"], description="Run mode"),
+    "verbose":    fargv.FargvBool(False,             description="Enable verbose logging"),
+    "files":      fargv.FargvPositional([],           description="Input files"),
 })
 ```
 
-The CLI behaviour is identical to the lazy version; the explicit form adds
-per-parameter descriptions in `--help` and makes the intent clearer for
-larger scripts.
+The CLI behaviour is identical; the explicit form adds per-parameter
+descriptions in `--help`.
 
-## Using fargv from bash
+## Call any Python function from the shell
 
-`python -m fargv` calls any Python callable directly from the shell —
-types and defaults are inferred from the function's signature automatically,
-with no wrapper code required.
+`python -m fargv` invokes any Python callable directly — types and defaults are
+inferred from the function's signature, no wrapper code required.
 
 ```bash
 python -m fargv numpy.linspace --help
@@ -85,10 +74,10 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 
 ![fargv bash demo](docs/_static/fargv_bash.png)
 
-The same call with `-ui tk` opens a Tk window instead:
+Pass `--user_interface tk` (or `qt`) to open a GUI instead:
 
 ```bash
-python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false -ui tk
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false --user_interface tk
 ```
 
 ![fargv Tk GUI demo](docs/_static/fargv_linspace_tk.png)
@@ -131,10 +120,12 @@ MIT
 
 ---
 
-## Legacy usage (v < 0.1.9)
+<details>
+<summary><strong>Legacy API (ver.&lt;0.1.9)</strong></summary>
 
-The original API uses single-dash flags and a plain dict.  It is still fully
-supported but new scripts should prefer `fargv.parse` above.
+The original API uses single-dash flags and `fargv.fargv()` instead of
+`fargv.parse()`.  It is still fully supported but new scripts should use
+`fargv.parse`.
 
 ```python
 import fargv
@@ -150,11 +141,8 @@ p, _ = fargv.fargv({
 print(f"Hello, {p.name}! count={p.count}")
 ```
 
-Both assignment and space-separated forms are accepted:
-
 ```bash
 python myscript.py -name=Alice -count=3 -verbose -mode=slow -files a.txt b.txt c.txt
-python myscript.py -name Alice -count 3 -verbose -mode slow -files a.txt b.txt c.txt
 ```
 
 Attach a description with a two-element tuple:
@@ -166,12 +154,4 @@ p, _ = fargv.fargv({
 })
 ```
 
-Built-in legacy parameters:
-
-| Parameter | Short | Description |
-|---|---|---|
-| `-help` | `-h` | Print help and exit |
-| `-bash_autocomplete` | | Print bash autocomplete script |
-| `-v` | | Verbosity level |
-
-String interpolation and env-var override work the same way as in the new API.
+</details>

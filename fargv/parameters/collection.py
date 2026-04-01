@@ -39,9 +39,9 @@ class FargvChoice(FargvParameter):
     def _get_class_type(cls) -> type:
         return str
 
-    def docstring(self, colored=None) -> str:
+    def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string that includes the allowed choices."""
-        base = super().docstring(colored=colored)
+        base = super().docstring(colored=colored, verbosity=verbosity)
         from ..ansi import dim, is_colored
         opts = ", ".join(repr(c) for c in self._choices)
         return base + dim(f"  choices: [{opts}]", colored=is_colored(colored))

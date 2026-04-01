@@ -88,15 +88,15 @@ class FargvSubcommand(FargvParameter):
         return {"name": self._selected_name, "result": self._sub_result}
 
     def split_argv(self, argv, long_prefix: str, key: str):
-        """Split *argv* into parent tokens, subcommand name, and subcommand tokens.
+        """Find the subcommand token; return (sub_name_or_None, all_remaining_tokens).
 
-        Checks flag style (``--key=name``) before positional style (first
-        non-flag token that matches a known subcommand name).
+        The subcommand token is removed from the returned list so that the caller
+        can freely route the remaining tokens between parent and sub parsers.
 
         :param argv:        Full argv list (not including ``prog`` name).
         :param long_prefix: Long flag prefix, typically ``"--"``.
         :param key:         This parameter's name (used to build ``--key=`` prefix).
-        :return: ``(parent_tokens, subcommand_name, subcommand_tokens)`` where
+        :return: ``(subcommand_name, remaining_tokens)`` where
                  *subcommand_name* is ``None`` when no subcommand was found.
         :raises FargvError: When a flag-style subcommand names an unknown subcommand.
         """
@@ -109,36 +109,45 @@ class FargvSubcommand(FargvParameter):
                         f"Unknown subcommand {sub_name!r}. "
                         f"Available: {list(self._definitions.keys())}"
                     )
-                return list(argv[:i]), sub_name, list(argv[i + 1:])
+                return sub_name, list(argv[:i]) + list(argv[i + 1:])
             if not token.startswith("-") and token in self._definitions:
-                return list(argv[:i]), token, list(argv[i + 1:])
-        return list(argv), None, []
+                return token, list(argv[:i]) + list(argv[i + 1:])
+        return None, list(argv)
+
+    def _ensure_sub_parsers(self, long_prefix: str = "--", short_prefix: str = "-") -> None:
+        """Build and cache a parser for every subcommand (idempotent).
+
+        Called by :class:`~fargv.parser.ArgumentParser` before routing tokens,
+        and by :func:`~fargv.config.apply_config` before applying config values
+        to individual subcommand namespaces.
+        """
+        if hasattr(self, "_sub_parsers"):
+            return
+        from ..type_detection import definition_to_parser
+        from .auto_params import FargvHelp
+        self._sub_parsers: dict = {}
+        for sub_name, sub_def in self._definitions.items():
+            sp = definition_to_parser(
+                sub_def, long_prefix=long_prefix, short_prefix=short_prefix
+            )
+            sp.name = sub_name
+            if "help" not in sp._name2parameters:
+                sp._add_parameter(FargvHelp(sp))
+            sp.infer_short_names()
+            self._sub_parsers[sub_name] = sp
 
     def parse_subcommand(self, sub_name: str, sub_tokens, long_prefix: str, short_prefix: str) -> dict:
-        """Build a parser for *sub_name* and parse *sub_tokens* with it.
-
-        A ``--help`` / ``-h`` flag is automatically injected into every
-        subcommand parser so that ``myscript <sub> --help`` prints the
-        subcommand-specific help and exits.
+        """Parse *sub_tokens* using the pre-built parser for *sub_name*.
 
         :param sub_name:     Name of the subcommand to parse.
-        :param sub_tokens:   Argv tokens that follow the subcommand token.
+        :param sub_tokens:   Argv tokens for the subcommand.
         :param long_prefix:  Long flag prefix (e.g. ``"--"``).
         :param short_prefix: Short flag prefix (e.g. ``"-"``).
         :return: Parsed namespace dict from the subcommand's parser.
         """
-        from ..type_detection import definition_to_parser
-        from .auto_params import FargvHelp
-        sub_parser = definition_to_parser(
-            self._definitions[sub_name],
-            long_prefix=long_prefix,
-            short_prefix=short_prefix,
-        )
-        sub_parser.name = sub_name
-        if "help" not in sub_parser._name2parameters:
-            sub_parser._add_parameter(FargvHelp(sub_parser))
-        sub_parser.infer_short_names()
-        return sub_parser.parse([sub_name] + list(sub_tokens), first_is_name=True)
+        self._ensure_sub_parsers(long_prefix, short_prefix)
+        sub_parser = self._sub_parsers[sub_name]
+        return sub_parser._parse_flat(list(sub_tokens), tolerate_unassigned_arguments=False)
 
     def ingest_value_strings(self, *values):
         """Not supported — subcommand parsing is handled by :class:`~fargv.parser.ArgumentParser`.
@@ -150,8 +159,8 @@ class FargvSubcommand(FargvParameter):
             f"use ArgumentParser.parse() instead."
         )
 
-    def docstring(self, colored=None) -> str:
-        """Return a one-line help string showing available subcommand names."""
+    def docstring(self, colored=None, verbosity=None) -> str:
+        """Return a help string showing available subcommand names and their parameters."""
         from ..ansi import bold, dim, yellow_bold, is_colored
         c = is_colored(colored)
         names = list(self._definitions.keys())
@@ -161,4 +170,19 @@ class FargvSubcommand(FargvParameter):
             dim(f"  default: {self._default_sub!r}", colored=c)
             if not self._mandatory else yellow_bold("  REQUIRED", colored=c)
         )
-        return f"  {name_str}{choices}{default_note}"
+        header = f"  {name_str}{choices}{default_note}"
+
+        # Expand each subcommand's parameters below the header
+        self._ensure_sub_parsers()
+        sub_lines = []
+        for sub_name, sp in self._sub_parsers.items():
+            sub_lines.append(f"    {bold(sub_name + ':', colored=c)}")
+            params = [p for p in sp._name2parameters.values()
+                      if not getattr(p, 'filter_out', False)]
+            if params:
+                for param in params:
+                    sub_lines.append("      " + param.docstring(colored=c, verbosity=verbosity).lstrip())
+            else:
+                sub_lines.append(dim("      (no extra parameters)", colored=c))
+
+        return chr(10).join([header] + sub_lines)

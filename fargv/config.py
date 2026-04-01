@@ -10,16 +10,18 @@ from typing import Any, Dict, Optional
 
 
 def _app_name(progname: str) -> str:
-    """Derive a filesystem-safe app name from the program name."""
+    """Derive a filesystem-safe app name from the program name.
+
+    All dots are replaced with underscores so that ``train.py`` becomes
+    ``train_py`` rather than ``train``.
+    """
     name = os.path.basename(progname or "fargv")
-    if "." in name:
-        name = name.rsplit(".", 1)[0]
-    return name.replace("-", "_").replace(" ", "_") or "fargv"
+    return name.replace(".", "_").replace("-", "_").replace(" ", "_") or "fargv"
 
 
 def default_config_path(progname: str) -> Path:
-    """Return ``~/.{app_name}.config.json`` (cross-platform)."""
-    return Path.home() / f".{_app_name(progname)}.config.json"
+    """Return ``~/.{app_name}.json`` (cross-platform)."""
+    return Path.home() / f".{_app_name(progname)}.json"
 
 
 def load_config(path: Optional[Path]) -> Dict[str, Any]:
@@ -51,9 +53,23 @@ def apply_config(
     config: Dict[str, Any],
     config_path: Optional[Path],
 ) -> None:
-    """Apply *config* values to parser parameters via evaluate().
+    """Apply *config* values to parser parameters.
 
-    Raises ValueError for any key not present in name2parameters.
+    When a config value is a dict and the corresponding parameter is a
+    :class:`~fargv.parameters.subcommand.FargvSubcommand`, the nested dict
+    is applied to **all** subcommand parsers simultaneously so that config
+    defaults are available regardless of which subcommand is selected at
+    parse time.
+
+    Expected config shape for subcommands::
+
+        {
+          "verbose": true,
+          "cmd": {
+            "train": {"lr": 0.001, "epochs": 50},
+            "eval":  {"dataset": "val"}
+          }
+        }
     """
     if not config:
         return
@@ -64,7 +80,19 @@ def apply_config(
             f"Known: {list(name2parameters.keys())}"
         )
     for key, val in config.items():
-        name2parameters[key].evaluate(val)
+        param = name2parameters[key]
+        if getattr(param, "is_subcommand", False) and isinstance(val, dict):
+            # Apply each sub-config to the matching sub-parser
+            param._ensure_sub_parsers()
+            for sub_name, sub_cfg in val.items():
+                if sub_name in param._sub_parsers and isinstance(sub_cfg, dict):
+                    apply_config(
+                        param._sub_parsers[sub_name]._name2parameters,
+                        sub_cfg,
+                        config_path,
+                    )
+        else:
+            param.evaluate(val)
 
 
 
@@ -118,6 +146,28 @@ def dump_config(parser, exclude=None) -> str:
         else:
             data[name] = val
     return json.dumps(data, indent=2, default=str)
+
+
+def init_config_if_missing(config_path, parser, exclude=None) -> bool:
+    """Write current default values to *config_path* if the file does not exist.
+
+    Creates any missing parent directories.  Does nothing and returns ``False``
+    when the file already exists.
+
+    :param config_path: Path to the config file (str or :class:`~pathlib.Path`).
+    :param parser:      The configured :class:`~fargv.parser.ArgumentParser`
+                        whose current (default) values are serialised.
+    :param exclude:     Parameter names to omit from the written config.
+    :return: ``True`` when the file was created, ``False`` when it already existed.
+    """
+    config_path = Path(config_path)
+    if config_path.exists():
+        return False
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as fh:
+        fh.write(dump_config(parser, exclude=exclude))
+        fh.write("\n")
+    return True
 
 
 def scan_config_path(argv, long_prefix: str) -> Optional[str]:

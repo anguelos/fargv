@@ -35,6 +35,8 @@ command line.
 
 ## Tkinter GUI
 
+![fargv Tk GUI — numpy.linspace example](_static/fargv_linspace_tk.png)
+
 The Tk dialog renders one row per parameter:
 
 - **bool** → `ttk.Checkbutton`

@@ -77,6 +77,19 @@ p, _ = fargv.parse(train)
 # python train.py --lr=1e-4 --epochs=50
 ```
 
+`python -m fargv` does the same for any importable callable — no script
+needed:
+
+```bash
+python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
+```
+
+![python -m fargv numpy.linspace in a terminal](_static/fargv_bash.png)
+
+Pass `--user_interface tk` to open a Tk dialog instead:
+
+![fargv Tk GUI — numpy.linspace](_static/fargv_linspace_tk.png)
+
 ### Mandatory parameters
 
 Use `REQUIRED` as the default to force the user to supply a value:
