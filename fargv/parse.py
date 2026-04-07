@@ -418,8 +418,12 @@ def parse(
             if raw_config_path:
                 from .config import init_config_if_missing
                 init_config_if_missing(raw_config_path, parser, exclude=_AUTO_PARAMS)
-            cfg = load_config(raw_config_path)
-            apply_config(user_params, cfg, raw_config_path)
+            try:
+                cfg = load_config(raw_config_path)
+                apply_config(user_params, cfg, raw_config_path)
+            except ValueError as _cfg_err:
+                import sys as _sys
+                print(f"fargv: ignoring config '{raw_config_path}': {_cfg_err}", file=_sys.stderr)
         elif _source == "envvar":
             apply_env_vars(user_params, getattr(parser, 'name', 'fargv'))
 

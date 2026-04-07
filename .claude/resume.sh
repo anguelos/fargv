@@ -1,1 +1,2 @@
-~/.local/bin/claude  --resume 5d71ec20-dbb1-4ac2-a884-6198e9f45951
+~/.local/bin/claude  --resume d942a744-e92f-472d-922d-b0e6d2fc1998
+

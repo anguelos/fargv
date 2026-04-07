@@ -1,10 +1,20 @@
 # fargv — Project Instructions for Claude
 
+## Claude Instructions
+
+At the start of every session, read these skill files:
+- `.claude/skills/commisar/SKILL.md`
+- `.claude/skills/focus-group/SKILL.md`
+
+When the user says "commisar" , follow the commisar skill instructions.
+When the user says "focus-group", follow the focus-group skill instructions.
+
+
 ## Project Overview
 
 `fargv` is a Python CLI argument parser library — easy to use, zero required effort from the user.
 
-- **Package location**: `src/fargv/` (migration from `fargv/` planned)
+- **Package location**: `fargv/` (migration to `src/fargv/` is planned but not done)
 - **PyPI name**: `fargv`
 - **Author**: Anguelos Nicolaou (anguelos.nicolaou@gmail.com)
 - **Docs**: Sphinx with MyST (Markdown only, no `.rst`)
@@ -29,39 +39,122 @@ Returns `(namespace, help_str)` — namespace is `SimpleNamespace` by default, a
 Built-in auto-params: `--help`/`-h`, `--bash_autocomplete`, `-v` (verbosity).
 Backward compatibility is **utmost importance**.
 
-### New OO API (`fargv/oo_fargv.py`)
-Class hierarchy rooted at `FargvParameter` (ABC):
+### New API (`fargv/parse.py`)
+Main entry point: `fargv.parse(definition)` — returns `(namespace, help_str)`.
 
-| Class | Legacy equivalent | Notes |
-|---|---|---|
-| `FargvInt` | `int` default | |
-| `FargvFloat` | `float` default | |
-| `FargvBool` | `bool` default | bare flag sets True |
-| `FargvStr` | `str` default | supports `{key}` cross-ref |
-| `FargvChoice` | `tuple` default | first item is default |
-| `FargvPositional` | `set` default | ordered list; unmatched tokens collected and assigned in postprocessing |
-| `FargvStream` | *(new)* | wraps file/stdin/stdout/stderr |
-| `FargvCountSwitch` | *(new)* | `-vvvv` = 4; `-vvv -v` also = 4 |
+Additional entry points: `fargv.parse_and_launch(fn)`, `fargv.parse_here()`.
 
-**Type inference ("intermediary representation")**: a plain Python literal implies its `Fargv*` type — `int` → `FargvInt`, `tuple` → `FargvChoice`, etc. This is how the legacy dict API maps to OO internally.
+`definition` can be:
+- **dataclass class** — recommended; returns a dataclass instance (see below)
+- **dict** — type-inferred from Python literals (same rules as legacy, but double-dash flags)
+- **callable** — type-inferred from type-annotated function signature
+- **`ArgumentParser`** — used directly (advanced/low-level)
 
-**Required parameters**: use a sentinel value (e.g. `FargvInt()` with no default, or a dedicated `REQUIRED` sentinel). No separate subclass.
+#### Dataclass API (recommended for new code)
 
-**Sub-commands**: TBD — either `main_` function convention or dict-of-dicts. Undecided.
+```python
+from dataclasses import dataclass, field
+import fargv
+
+@dataclass
+class Config:
+    """Program description shown in --help."""
+    lr: float = 0.01
+    "Learning rate."           # bare string literal → shown as param description in --help
+    epochs: int = 10
+    dataset: tuple = ("mnist", "cifar10", "svhn")  # tuple default → FargvChoice (first is default)
+    cmd: dict = field(default_factory=lambda: {     # nested dict default → FargvSubcommand
+        "train": {"output": "model.pt"},
+        "eval":  {"checkpoint": "model.pt"},
+    })
+    "Subcommand."
+
+p, _ = fargv.parse(Config, subcommand_return_type="nested")
+# p is a Config instance
+# p.dataset is the chosen string; p.cmd is SimpleNamespace(name="train", output="model.pt")
+```
+
+Type inference for dataclass fields:
+- `int` annotation or `int` default → `FargvInt`
+- `float` annotation or `float` default → `FargvFloat`
+- `bool` annotation or `bool` default → `FargvBool`
+- `str` annotation or `str` default → `FargvStr`
+- `tuple` default → `FargvChoice` (first element is default)
+- `list` / `set` default → `FargvPositional`
+- nested `dict` default (all values are dicts/callables/`ArgumentParser`) → `FargvSubcommand`
+- `FargvParameter` instance as default → used as-is (set via `field(default_factory=...)`)
+- Fields with no default are mandatory (`REQUIRED` sentinel internally)
+- Bare string literals immediately after a field definition become the parameter description in `--help`
+
+#### Dict API
+
+```python
+p, _ = fargv.parse({
+    "lr": 0.01,
+    "mode": ("train", "eval", "export"),   # FargvChoice
+    "cmd": {                                # FargvSubcommand
+        "fit":     {"output": "model.pt"},
+        "predict": {"checkpoint": "model.pt"},
+    },
+})
+```
+
+#### Function API
+
+```python
+def train(lr: float = 0.01, epochs: int = 10): ...
+
+p, _ = fargv.parse(train)
+# or shorthand:
+fargv.parse_and_launch(train)
+```
+
+### Auto-params (injected automatically, can be disabled per-param)
+- `--help` / `-h` — print help and exit
+- `--verbosity` / `-v` — integer verbosity level (`is_count_switch=True`)
+- `--bash_autocomplete` — print bash completion script and exit
+- `--config <path>` — load JSON/YAML/TOML/INI config; default: `~/.{appname}.config.json`
+- `--user_interface` — choose `cli` / `tk` / `qt` (when GUI backends are installed)
+
+### Override priority
+coded default → config file → env var (`APPNAME_PARAMNAME` uppercased) → CLI/UI
+
+### Subcommands
+A nested dict where all values are dicts/callables/`ArgumentParser` is inferred as `FargvSubcommand`.
+The subcommand token may appear anywhere in argv; flags are routed by name not position.
+
+`subcommand_return_type` options for `fargv.parse(...)`:
+- `"flat"` (default) — sub-params merged into top-level namespace; subcommand key = selected name string
+- `"nested"` — subcommand key holds `SimpleNamespace(name=..., **sub_params)`
+- `"tuple"` — returns `((name, sub_ns, parent_ns), help_str)`
+
+**With dataclass definitions, use `"nested"` or `"tuple"`** — `"flat"` drops sub-params not declared as dataclass fields.
+
+### Parameter classes (all exported from `fargv` top-level)
+
+| Class | Notes |
+|---|---|
+| `FargvInt` | integer; `is_count_switch=True` enables `-vvvv` = 4 style |
+| `FargvFloat` | float |
+| `FargvBool` | boolean flag |
+| `FargvStr` | string with `{key}` cross-interpolation |
+| `FargvChoice` | enum from a list; first item is default |
+| `FargvPositional` | ordered list of unmatched positional tokens |
+| `FargvStream` / `FargvInputStream` / `FargvOutputStream` | file/stdin/stdout/stderr |
+| `FargvPath` / `FargvExistingFile` / `FargvNonExistingFile` / `FargvFile` | path with validation |
+| `FargvTuple` | fixed-length typed tuple (via `ast.literal_eval`) |
+| `FargvSubcommand` | git-style nested sub-parser |
+| `REQUIRED` | sentinel marking a parameter as mandatory |
 
 ---
 
-## Planned Features (priority order from CLAUDE_INITIAL.md)
+## Planned Features
 
-1. **`FargvCountSwitch`** — `-vvvv` style verbosity counter
-2. **Config file support** — JSON, YAML, TOML, INI (all formats); zero user effort
-3. **Env var override** — auto-derived names (e.g. `SCRIPTNAME_PARAMNAME`); no annotation needed
-4. **Google Fire-like decorator** — wrap any function, auto-generate CLI from its signature
-5. **Dynamic return type** — special object that can be re-parsed or updated at runtime
-6. **GUI / interactive mode** — auto-select: CLI in scripts, `ipywidgets` in Jupyter, explicit GUI engines (tkinter, Qt) when requested
-7. **Sub-commands** — design TBD
-8. **`src/` layout migration** — move `fargv/` → `src/fargv/`
-9. **Sphinx docs** — MyST (Markdown), auto-generated from docstrings
+1. **`src/` layout migration** — move `fargv/` → `src/fargv/`
+2. **Sphinx docs** — MyST (Markdown), auto-generated from docstrings
+3. **Sub-command design with dataclasses** — nested dataclass fields as subcommand definitions
+4. **Google Fire-like decorator** — `@fargv.cli` wrapping any function
+5. **Dynamic return type** — re-parseable namespace object
 
 ---
 
@@ -79,4 +172,4 @@ Class hierarchy rooted at `FargvParameter` (ABC):
 - No external runtime dependencies (currently `install_requires=[]`)
 - Tests in `test/unittest/`; coverage excludes `src/` folder
 - Only `.md` files for documentation (Sphinx via MyST)
-- Env var naming: `SCRIPTNAME_PARAMNAME` (uppercased, auto-derived)
+- Env var naming: `APPNAME_PARAMNAME` (uppercased, auto-derived from program name)

@@ -61,6 +61,8 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build"]
 
 html_theme = "sphinx_rtd_theme"
+html_logo = "_static/logo.svg"
+html_favicon = "_static/logo_512.png"
 html_static_path = ["_static"]
 
 myst_enable_extensions = ["colon_fence"]

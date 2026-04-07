@@ -56,21 +56,16 @@ def _looks_like_subcommand_dict(d: dict) -> bool:
 def _infer_param(key: str, value: Any) -> FargvParameter:
     """Convert a plain Python literal to the matching FargvParameter subclass.
 
-    Two-element (default, "description") wrappers are unwrapped first (same
-    rule as legacy): not str, not set, has __len__, len==2, second elem is str.
-    A two-string tuple ("fast","slow") therefore becomes (default="fast",
-    description="slow") — a plain FargvStr, NOT a choice. Use three or more
-    elements for a choice: ("fast","slow","medium").
+    A two-element tuple ``(default, "description")`` where the second element
+    is a string extracts the description and infers the type from the first
+    element normally.  Use three or more elements for a choice parameter.
     """
     description: Optional[str] = None
-    if (
-        not isinstance(value, str)
-        and not isinstance(value, set)
-        and hasattr(value, "__len__")
-        and len(value) == 2
-        and isinstance(value[1], str)
-    ):
-        description, value = value[1], value[0]
+
+    # 2-element (default, "description") shorthand — unwrap before type dispatch
+    if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
+        description = value[1]
+        value = value[0]
 
     if isinstance(value, FargvParameter):
         if value.name is None:
@@ -254,6 +249,49 @@ def function_to_parser(
 
 
 
+def _extract_field_docstrings(cls) -> Dict[str, str]:
+    """Extract PEP 257-style attribute docstrings from a dataclass via AST.
+
+    A field docstring is a bare string literal immediately following an
+    annotated assignment, either on the next line or on the same line
+    separated by a semicolon::
+
+        lr: float = 0.001
+        "Learning rate."                    # next-line form (conventional)
+
+        epochs: int = 90; "Total epochs."   # same-line form (compact)
+
+    The docstring is used as the parameter description in ``--help`` output
+    when no explicit ``description=`` is provided on the ``Fargv*`` instance.
+
+    Returns an empty dict when source is unavailable (compiled-only installs,
+    dynamically constructed classes).
+    """
+    import ast
+    import textwrap as _tw
+    try:
+        source = _tw.dedent(inspect.getsource(cls))
+        tree   = ast.parse(source)
+    except (OSError, TypeError, SyntaxError):
+        return {}
+
+    result: Dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == cls.__name__:
+            body = node.body
+            for i, stmt in enumerate(body):
+                if (isinstance(stmt, ast.AnnAssign)
+                        and isinstance(stmt.target, ast.Name)
+                        and i + 1 < len(body)):
+                    nxt = body[i + 1]
+                    if (isinstance(nxt, ast.Expr)
+                            and isinstance(nxt.value, ast.Constant)
+                            and isinstance(nxt.value.value, str)):
+                        result[stmt.target.id] = nxt.value.value.strip()
+            break
+    return result
+
+
 def dataclass_to_parser(
     cls,
     long_prefix: str = "--",
@@ -266,6 +304,11 @@ def dataclass_to_parser(
     default are marked mandatory.  Fields whose type is unrecognisable *and*
     whose default is ``None`` are skipped (same rule as
     :func:`function_to_parser`).
+
+    Attribute docstrings (bare string literals immediately following a field
+    definition) are extracted via :func:`_extract_field_docstrings` and used
+    as the parameter description when no ``description=`` is already set on
+    the ``Fargv*`` instance.
 
     :param cls:          A dataclass **class** (not an instance).
     :param long_prefix:  Long flag prefix (default ``"--"``).
@@ -281,6 +324,7 @@ def dataclass_to_parser(
         hints = typing.get_type_hints(cls)
     except Exception:
         hints = {}
+    field_docs = _extract_field_docstrings(cls)
     parser = ArgumentParser(long_prefix=long_prefix, short_prefix=short_prefix)
     for field in _dc.fields(cls):
         name       = field.name
@@ -293,14 +337,21 @@ def dataclass_to_parser(
         else:
             default = (field.default if field.default is not _dc.MISSING
                        else field.default_factory())  # type: ignore[misc]
-            fargv_cls = _annotation_to_fargv_cls(annotation)
-            if fargv_cls is None and default is None:
-                continue
-            fargv_param = (
-                fargv_cls(default, name=name)
-                if fargv_cls is not None
-                else _infer_param(name, default)
-            )
+            if isinstance(default, FargvParameter):
+                fargv_param = default
+                fargv_param._name = name
+            else:
+                fargv_cls = _annotation_to_fargv_cls(annotation)
+                if fargv_cls is None and default is None:
+                    continue
+                fargv_param = (
+                    fargv_cls(default, name=name)
+                    if fargv_cls is not None
+                    else _infer_param(name, default)
+                )
+        doc = field_docs.get(name)
+        if doc and fargv_param._description is None:
+            fargv_param._description = doc
         parser._add_parameter(fargv_param)
     return parser
 

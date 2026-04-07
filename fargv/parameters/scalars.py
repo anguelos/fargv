@@ -159,6 +159,14 @@ class FargvBool(FargvParameter):
             return self._value
         raise FargvError(f"Cannot evaluate {val!r} as bool for '{self._name}'")
 
+    def docstring(self, colored=None, verbosity=None) -> str:
+        """Return a one-line help string, appending a switch note when default is ``False``."""
+        base = super().docstring(colored=colored, verbosity=verbosity)
+        if self._default is False:
+            from ..ansi import dim, is_colored
+            return base + dim("  (switch: --flag sets True)", colored=is_colored(colored))
+        return base
+
     def ingest_value_strings(self, *values: List[str]) -> List[str]:
         """Toggle on bare call; accept ``0/1/t/f/true/false`` when a value is supplied.
 
