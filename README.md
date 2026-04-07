@@ -1,5 +1,9 @@
 # fargv
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/anguelos/fargv/main/docs/_static/logo_512.png" width="120" alt="fargv logo"/>
+</p>
+
 [![Tests](https://github.com/anguelos/fargv/actions/workflows/tests.yml/badge.svg)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/anguelos/fargv/badges/badges/coverage.json)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/fargv)](https://pypi.org/project/fargv/)
@@ -8,7 +12,50 @@
 [![Python Versions](https://img.shields.io/pypi/pyversions/fargv)](https://pypi.org/project/fargv/)
 [![GitHub repo size](https://img.shields.io/github/repo-size/anguelos/fargv)](https://github.com/anguelos/fargv)
 
-A very easy to use argument parser for Python scripts.
+A very easy to use argument parser for Python scripts — a zero-boilerplate
+replacement for `argparse`, `click`, `typer`, and similar CLI libraries.
+Define your parameters once as a plain dict, a dataclass, or a type-annotated
+function signature; fargv infers types, generates `--help`, assigns short-name
+aliases, reads a config file (JSON, YAML, TOML, or INI), applies environment
+variable overrides, and optionally opens a GUI — all without any additional
+configuration.
+
+![fargv data-flow: definition → config → env vars → CLI / GUI / Jupyter](docs/_static/fargv_flow.svg)
+
+## Features
+
+**Multiple definition styles** — choose the style that fits your script:
+plain Python dicts (zero imports), `@dataclass` definitions (type-safe return
+values, IDE completion), or ordinary type-annotated functions.  fargv covers the
+full argparse feature set and adds first-class dataclass support.
+
+**Config file integration** — every script automatically reads from a JSON
+config file at `~/.{scriptname}.config.json`.  YAML, TOML, and INI formats are
+also supported via the `--config` flag.  Command-line values always override the
+config file.
+
+**Environment variable overrides** — parameters can be set via environment
+variables with auto-derived names (`SCRIPTNAME_PARAMNAME`).  The override
+priority is: coded default → config file → environment variable → CLI.  No
+annotation or registration is needed; fargv derives the variable names
+automatically.
+
+**Subcommands** — nested dicts are automatically interpreted as git-style
+subcommand trees.  Flags are routed by name rather than position, so parent
+flags and subcommand flags can be mixed freely on the command line.
+
+**GUI backends** — pass `--user_interface tk` to open a Tkinter dialog,
+`--user_interface qt` for a PyQt / PySide window, or run inside a Jupyter
+notebook to get ipywidgets automatically.  The same parameter definition drives
+the CLI, the Tk GUI, the Qt GUI, and the Jupyter widget interface — no extra
+code required.
+
+**Bash tab completion** — run `source <(myscript.py --bash_autocomplete)` to
+enable shell completion for all flags and subcommand names.
+
+**No runtime dependencies** — the core library uses only the Python standard
+library.  GUI backends (tkinter, PyQt, PySide, ipywidgets) are optional and
+loaded only when requested.
 
 ## Installation
 

@@ -110,6 +110,7 @@ def _call_target(target, target_spec: str, rest_argv: list) -> None:
             target,
             given_parameters=argv,
             non_defaults_are_mandatory=True,
+            fn_def_tolerate_wildcards=True,
         )
     except fargv.FargvError as exc:
         sys.stderr.write(f"fargv: {exc}\n")

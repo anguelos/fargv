@@ -1,5 +1,10 @@
 # Quickstart
 
+![fargv data-flow: definition → config → env vars → CLI / GUI / Jupyter](_static/fargv_flow.svg)
+
+Define your parameters once; fargv builds the full stack — config file,
+environment variable overrides, and CLI / GUI / Jupyter interface — automatically.
+
 ## Installation
 
 ```bash
