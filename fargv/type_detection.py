@@ -56,11 +56,16 @@ def _looks_like_subcommand_dict(d: dict) -> bool:
 def _infer_param(key: str, value: Any) -> FargvParameter:
     """Convert a plain Python literal to the matching FargvParameter subclass.
 
-    A two-element tuple of strings is a two-choice enum, consistent with
-    three-or-more element tuples.  There is no (default, description) shorthand
-    in the dict API — use explicit ``Fargv*`` instances for descriptions.
+    A two-element tuple ``(default, "description")`` where the second element
+    is a string extracts the description and infers the type from the first
+    element normally.  Use three or more elements for a choice parameter.
     """
     description: Optional[str] = None
+
+    # 2-element (default, "description") shorthand — unwrap before type dispatch
+    if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
+        description = value[1]
+        value = value[0]
 
     if isinstance(value, FargvParameter):
         if value.name is None:
