@@ -40,6 +40,7 @@ setup(
             "sphinx-rtd-theme",
             "myst-parser",
             "sphinx-copybutton",
+            "graphviz",
         ],
     },
 )

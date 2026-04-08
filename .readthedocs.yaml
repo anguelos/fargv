@@ -6,6 +6,8 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.12"
+  apt_packages:
+    - graphviz       # required by sphinx.ext.inheritance_diagram
 
 sphinx:
   configuration: docs/conf.py
@@ -15,5 +17,4 @@ python:
   install:
     - method: pip
       path: .
-      extra_requirements:
-        - docs
+    - requirements: docs/requirements.txt

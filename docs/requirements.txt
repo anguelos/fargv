@@ -1,0 +1,9 @@
+# Sphinx documentation dependencies (used by RTD and local `make htmldoc`)
+sphinx
+myst-parser
+sphinx-copybutton
+sphinx-rtd-theme
+# sphinx.ext.inheritance_diagram needs the graphviz Python package for
+# fallback rendering; the graphviz *binary* (dot) must be installed separately
+# (apt_packages in .readthedocs.yaml, or `sudo apt install graphviz` locally)
+graphviz

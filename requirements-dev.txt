@@ -13,8 +13,8 @@ sphinx
 myst-parser
 sphinx-copybutton
 sphinx-rtd-theme
-sphinxcontrib-ansi    # ANSI colour rendering in docs (ansi-block directive)
 graphviz              # UML/inheritance diagrams (sphinx.ext.inheritance_diagram)
+# sphinxcontrib-ansi  # optional: ANSI colour in docs; uncomment when ansi-block directives are added
 
 # ── Examples ──────────────────────────────────────────────────────────────────
 # examples/sklearn_demo.py uses scikit-learn
