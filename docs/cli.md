@@ -15,43 +15,10 @@ python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 
 ---
 
-## Legacy API (single-dash)
+## fargv.parse — built-in flags
 
-Scripts using `fargv.fargv` automatically get these parameters:
-
-### `-help` / `-h`
-
-Print a help message listing all parameters with types, defaults, and current
-values, then exit.
-
-```bash
-python myscript.py -help
-```
-
-### `-bash_autocomplete`
-
-Print a bash completion script for the current program.  Source it in your
-shell or drop it in `/etc/bash_completion.d`:
-
-```bash
-source <(python myscript.py -bash_autocomplete)
-```
-
-### `-v`
-
-Set the global verbosity level (integer, default `1`).  Used by
-`fargv.util.warn` — messages with `verbose <= v` are printed.
-
-```bash
-python myscript.py -v=2
-```
-
----
-
-## New OO API (double-dash)
-
-Scripts using `fargv.parse` get these parameters (all configurable via
-`auto_define_*` keyword arguments):
+Every script that uses `fargv.parse` automatically receives the following
+parameters (all can be individually disabled with `auto_define_*=False`):
 
 ### `--help` / `-h`
 
@@ -116,3 +83,17 @@ p, _ = fargv.parse(
     auto_define_config=False,
 )
 ```
+
+---
+
+## Legacy API built-in flags
+
+Scripts that still use `fargv.fargv` (single-dash syntax) get a smaller set
+of built-in parameters.  See [Legacy API Reference](api_legacy.md) for
+details.
+
+| Flag | Alias | Description |
+|---|---|---|
+| `-help` | `-h` | Print help and exit |
+| `-bash_autocomplete` | — | Print bash completion script and exit |
+| `-v` | — | Set verbosity level (integer) |

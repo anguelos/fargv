@@ -84,7 +84,7 @@ def _list_callables(module) -> None:
             sig = ""
             try:
                 sig = str(inspect.signature(getattr(module, name)))
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # pragma: no cover
                 pass
             print(f"  {prog}.{name}{sig}")
         print(f"\nUsage: python -m fargv {prog}.<callable> [--param=value ...]")

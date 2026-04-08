@@ -21,30 +21,25 @@ This can be changed with the `override_order` argument to `parse()`.
 
 ## Config file
 
-### Auto-injected parameters
+### Auto-injected parameter
 
-When the script has a recognisable name (not `__main__`, `-c`, etc.), fargv
-injects two parameters:
+fargv injects a `--config` parameter automatically:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--config` | `~/.{appname}.config.json` | Path to the JSON config file |
-| `--auto_configure` | `False` | Print current config as JSON and exit |
+| `--config` | `~/.{appname}.config.json` | Path to a JSON/YAML/TOML/INI config file |
 
 ```bash
-# Save the current effective configuration
-python train.py --lr=5e-4 --auto_configure > ~/.train.config.json
-
-# Next run picks it up automatically
-python train.py   # lr=5e-4 from config file
-
-# Override the config path
+# Explicitly point to a config file
 python train.py --config=/opt/shared/train.json
+
+# Next run picks up the default path automatically (if it exists)
+python train.py   # reads ~/.train_py.config.json
 ```
 
 ### Config file format
 
-A flat JSON object — keys match parameter names:
+A JSON object whose keys match parameter names:
 
 ```json
 {
@@ -55,17 +50,71 @@ A flat JSON object — keys match parameter names:
 }
 ```
 
-Unknown keys are silently ignored.  Config values are overridden by CLI
-arguments parsed afterwards.
+Unknown parameter names raise a `FargvError` at parse time — config files
+are validated against the parser's known parameters.  Config values are
+overridden by CLI arguments parsed afterwards.
 
-### Passing an empty string to --config
+### Generating a config from current values
+
+Pass an empty string to `--config` to print **all current parameter values**
+as JSON to stdout and exit.  Pipe the output to bootstrap a config file:
 
 ```bash
-python train.py --config=''
+python train.py --lr=5e-4 --config=
+# prints JSON to stdout, then exits
+
+python train.py --lr=5e-4 --config= > ~/.train_py.config.json
+# save it; next runs pick it up automatically
 ```
 
-This is a shorthand for `--auto_configure`: the current parameter values are
-printed as JSON to stdout and the process exits.  Useful in shell pipelines.
+### Config files with subcommands
+
+When a parser has subcommands, `--config=` includes **all branches** in the
+dump so the same file covers every subcommand:
+
+```bash
+$ python prog.py train --config=
+{
+  "verbose": false,
+  "cmd": {
+    "train": {"lr": 0.01, "epochs": 10},
+    "eval":  {"dataset": "val"}
+  }
+}
+```
+
+Config files **may set per-branch parameter values** using this nested format.
+When loaded, fargv applies each branch's values to the matching sub-parser
+regardless of which subcommand is selected at runtime:
+
+```json
+{
+  "verbose": true,
+  "cmd": {
+    "train": {"lr": 0.001, "epochs": 50},
+    "eval":  {"dataset": "test"}
+  }
+}
+```
+
+Config files **may not select which subcommand to run** — that is
+only possible via the CLI.  Placing a string value for a subcommand
+key raises `FargvError` at parse time:
+
+```json
+{ "cmd": "train" }
+```
+
+```text
+FargvError: subcommand 'cmd' cannot be selected via a config file (got 'train').
+Config may only set per-branch parameter values using the nested dict format:
+{<subcommand>: {<branch>: {param: value}}}
+```
+
+> **Note**: subcommand param values in the dump always reflect definition
+> defaults (not CLI overrides for the selected branch), because `--config=`
+> fires before subcommand parsing completes.  Top-level params do capture
+> their CLI values.  Edit the generated file to customise per-branch defaults.
 
 ### Disabling config-file support
 
@@ -75,7 +124,7 @@ p, _ = fargv.parse(definition, auto_define_config=False)
 
 ### Manual config parameter
 
-To use a non-default config path *in code*:
+To hard-code a non-default config path:
 
 ```python
 from fargv import parse, FargvConfig
@@ -94,20 +143,38 @@ Every user-defined parameter automatically accepts an environment variable
 override.  The name is derived as:
 
 ```
-{SCRIPTNAME}_{PARAMNAME}   (both uppercased)
+{SCRIPTNAME}_{PARAMNAME}   (both uppercased, dots/hyphens → underscores)
 ```
 
 For `train.py` with parameter `lr`:
 
 ```bash
-export TRAIN_LR=0.0001
+export TRAIN_PY_LR=0.0001
 python train.py   # lr=0.0001
 ```
 
 The env var is overridden by an explicit CLI argument:
 
 ```bash
-TRAIN_LR=0.0001 python train.py --lr=0.001   # lr=0.001
+TRAIN_PY_LR=0.0001 python train.py --lr=0.001   # lr=0.001
+```
+
+### Env vars and subcommands
+
+Environment variables **may not select which subcommand to run**.
+If an env var matches a subcommand parameter name, fargv raises `FargvError`
+at parse time:
+
+```bash
+export PROG_CMD=eval
+python prog.py   # FargvError: env var 'PROG_CMD' attempts to select subcommand ...
+```
+
+Only the CLI can select a subcommand:
+
+```bash
+python prog.py eval   # OK
+python prog.py --cmd=eval   # OK (flag form)
 ```
 
 ### Disabling env-var support
@@ -133,9 +200,7 @@ p, _ = fargv.parse(definition, override_order=["default", "config", "ui"])
 # Env vars only, no config file
 p, _ = fargv.parse(definition, override_order=["default", "envvar", "ui"])
 
-# Env vars override config (reversed from default)
-p, _ = fargv.parse(definition, override_order=["default", "config", "envvar", "ui"])
-# Wait — that IS the default.  To make config override env vars:
+# Env vars take priority over config (reversed from default)
 p, _ = fargv.parse(definition, override_order=["default", "envvar", "config", "ui"])
 ```
 

@@ -16,8 +16,10 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.linkcode",
     "sphinx.ext.napoleon",
+    "sphinx.ext.inheritance_diagram",
     "myst_parser",
     "sphinx_copybutton",
+    "sphinxcontrib.ansi",
 ]
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

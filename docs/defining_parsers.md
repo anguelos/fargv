@@ -74,20 +74,53 @@ p, _ = fargv.parse({
 "mode": ("train", "eval", "test")  # choice: train | eval | test
 ```
 
-**Pros**
+**When to use**
 
-- Absolute minimum boilerplate — works in under 60 seconds
-- `{key}` string interpolation resolves cross-references automatically
-- Auto-generated `--help`, short flags, bash completion, config file, env-var
-  override — all for free
-- Defaults read as documentation; the dict *is* the spec
+- Prototypes and research scripts where speed of writing matters most
+- Notebooks and one-off data-pipeline scripts
+- Teaching / demos where the definition should be self-evident
 
-**Cons**
+**When to avoid**
 
-- No per-parameter descriptions (appear blank in `--help`)
-- No rich types: streams, paths, fixed-length tuples, count-switches
-- IDEs cannot autocomplete `p.lr` (returns `SimpleNamespace`)
-- No mandatory parameters (every key must have a default)
+- When `--help` quality matters for end users (no descriptions on params)
+- When you need mandatory parameters, file-existence checks, or streams
+- When you want IDE autocompletion on the result namespace
+
+| | |
+|---|---|
+| ✅ Pros | ❌ Cons |
+| Minimum boilerplate — a plain dict | No per-parameter `--help` descriptions |
+| `{key}` string interpolation | No rich types (streams, paths, tuples) |
+| Self-documenting defaults | No mandatory parameters |
+| Full auto-params for free | `p.lr` is untyped `SimpleNamespace` |
+
+**How do I…**
+
+*Make a parameter a choice?* — use a tuple with ≥ 3 elements:
+
+```python
+{"mode": ("train", "eval", "test")}   # first element is default
+```
+
+*Add a description to a single parameter without switching styles?* — use the
+2-element `(default, "description")` shorthand:
+
+```python
+{"lr": (0.01, "Initial learning rate")}
+```
+
+*Collect extra CLI tokens?* — use an empty list:
+
+```python
+{"files": []}   # python script.py a.txt b.txt → p.files == ["a.txt", "b.txt"]
+```
+
+*Switch to a richer style for just one parameter?* — mix a `Fargv*` object
+into the dict alongside plain literals:
+
+```python
+{"lr": 0.01, "weights": fargv.FargvStr(fargv.REQUIRED)}
+```
 
 ---
 
@@ -177,20 +210,53 @@ import sys
 "weights": fargv.FargvStr(fargv.REQUIRED)
 ```
 
-**Pros**
+**When to use**
 
-- Per-parameter `--help` descriptions
-- Rich types: `FargvExistingFile`, `FargvStream`, `FargvTuple`, `FargvPositional`,
-  count-switch (`is_count_switch=True`), …
-- Mandatory parameters (`fargv.REQUIRED`) are explicit and self-documenting
-- `{key}` string interpolation still works for `FargvStr` values
-- Mix with plain literals in one dict — no need to convert everything
+- Production scripts where `--help` quality and clear error messages matter
+- When you need mandatory parameters, file-existence validation, or streams
+- When mixing one or two rich parameters into an otherwise plain dict
 
-**Cons**
+**When to avoid**
 
-- More verbose than bare literals
-- Still returns `SimpleNamespace` — no IDE property autocompletion
-- Requires importing individual `Fargv*` classes
+- When you need IDE autocompletion on the result (use dataclass instead)
+- For trivial scripts where the extra verbosity slows you down
+
+| | |
+|---|---|
+| ✅ Pros | ❌ Cons |
+| Per-parameter `--help` descriptions | More verbose than bare literals |
+| Rich types (path, stream, tuple, count-switch) | `SimpleNamespace` result — no IDE autocompletion |
+| Explicit mandatory parameters (`REQUIRED`) | Requires importing `Fargv*` classes |
+| Mix freely with plain literals | |
+
+**How do I…**
+
+*Make a parameter mandatory?*
+
+```python
+{"weights": fargv.FargvStr(fargv.REQUIRED, description="model weights")}
+```
+
+*Add a count-switch verbosity flag?*
+
+```python
+{"verbose": fargv.FargvInt(0, short_name="v", is_count_switch=True)}
+# -vvv sets verbose=3
+```
+
+*Require a file to exist at parse time?*
+
+```python
+{"config": fargv.FargvExistingFile(fargv.REQUIRED)}
+```
+
+*Accept a stream (file, stdout, stderr)?*
+
+```python
+import sys
+{"log": fargv.FargvStream(sys.stderr)}
+# --log=out.txt  or  --log=stdout
+```
 
 ---
 
@@ -277,22 +343,56 @@ def model(paths=fargv.FargvPositional([])):  # fargv sees a FargvPositional obje
     ...                                       # not recognised; treated as FargvStr
 ```
 
-**Pros**
+**When to use**
 
-- Zero duplication: the function's own signature *is* the parser definition
-- Works on any callable — your own functions, stdlib, or third-party
-- Docstring is available for `--help` display
-- Natural fit for `python -m fargv module.function` workflows
+- Library functions you want to expose as CLI tools with no wrapper
+- Ad-hoc invocation via `python -m fargv module.callable`
+- When the function already documents itself via docstring and annotations
 
-**Cons**
+**When to avoid**
 
-- Requires type annotations on every parameter for accurate coercion;
-  unannotated parameters default to `FargvStr`
-- `*args` / `**kwargs` require `fn_def_tolerate_wildcards=True`
-- Parameters whose default is `None` and have no annotation are skipped
-- Rich fargv types (`FargvPositional`, `FargvStream`, …) are not usable as
-  function defaults
-- No `{key}` string interpolation
+- When you need IDE autocompletion on the parsed result (use dataclass)
+- When parameters need rich types like streams or path validation
+- When the function has unannotated `None` defaults you depend on
+
+| | |
+|---|---|
+| ✅ Pros | ❌ Cons |
+| Zero duplication — signature *is* the definition | Type annotations required for accurate coercion |
+| Works on any callable (stdlib, third-party) | `*args`/`**kwargs` need `fn_def_tolerate_wildcards=True` |
+| Docstring appears in `--help` | `None` defaults without annotations are silently skipped |
+| Natural fit for `python -m fargv` | Rich `Fargv*` types not usable as function defaults |
+| | No `{key}` interpolation |
+
+**How do I…**
+
+*Make parameters without defaults mandatory?*
+
+```python
+def run(host: str, port: int = 8080): ...
+p, _ = fargv.parse(run, non_defaults_are_mandatory=True)
+# python run.py --host=localhost
+```
+
+*Parse and call in one step?*
+
+```python
+fargv.parse_and_launch(train)
+```
+
+*Call from inside the function itself?*
+
+```python
+def train(lr: float = 0.01, epochs: int = 10):
+    p, _ = fargv.parse_here()   # resolves own signature
+    print(p.lr, p.epochs)
+```
+
+*Handle `*args` or `**kwargs`?*
+
+```python
+p, _ = fargv.parse(fn, fn_def_tolerate_wildcards=True)
+```
 
 ---
 
@@ -482,26 +582,76 @@ p, _ = fargv.parse(cfg)   # raises TypeError — pass the class, not an instance
 p, _ = fargv.parse(TrainConfig)
 ```
 
-**Pros**
+**When to use**
 
-- **Full IDE autocompletion**: the return type is your class — pyright, mypy,
-  and PyCharm all know every attribute and its type
-- **`isinstance` checks work**: `assert isinstance(cfg, TrainConfig)`
-- **Reusable as a typed config** throughout the codebase
-- **Rich types** (`FargvPositional`, `FargvStream`, count-switches) expressible
-  via `Fargv*` instance defaults (approach 4b)
-- **Mandatory fields** expressed naturally: omit the default value entirely
-- Integrates cleanly with `dataclasses.asdict`, `json.dumps`, etc.
+- Any project where IDE autocompletion, mypy/pyright, or `isinstance` checks matter
+- When the config object is passed around multiple modules
+- When you want mandatory fields expressed as plain missing defaults
 
-**Cons**
+**When to avoid**
 
-- Slightly more boilerplate than a plain dict for trivial scripts
-- Type annotations are required for accurate CLI coercion (and for
-  `@dataclass` to register the field at all)
-- `{key}` string interpolation is not supported across fields
-- `Fargv*` instance defaults (approach 4b) share the same object across all
-  class instances — this is harmless for fargv's use but may surprise you
-  if you construct `TrainConfig()` directly elsewhere
+- For throwaway scripts (a plain dict is faster to write)
+- When `{key}` string interpolation between parameters is essential
+
+| | |
+|---|---|
+| ✅ Pros | ❌ Cons |
+| Full IDE autocompletion on result | More boilerplate than a plain dict for tiny scripts |
+| `isinstance(cfg, MyConfig)` works | Type annotations required on every field |
+| Reusable typed config across modules | No `{key}` interpolation across fields |
+| Rich types via `Fargv*` instance defaults | `Fargv*` defaults share one object per class |
+| Mandatory fields: just omit the default | |
+| Works with `dataclasses.asdict`, `json.dumps` | |
+
+**How do I…**
+
+*Make a field mandatory?* — omit the default:
+
+```python
+@dataclass
+class Config:
+    checkpoint: str        # no default → required on CLI
+    threshold: float = 0.5
+```
+
+*Add a description to a field?* — bare string literal immediately after:
+
+```python
+@dataclass
+class Config:
+    lr: float = 0.1
+    "Initial learning rate."   # shown in --help
+```
+
+*Add a rich type (stream, count-switch, positional)?*
+
+```python
+import sys
+from dataclasses import dataclass
+import fargv
+
+@dataclass
+class Config:
+    verbose: int   = fargv.FargvInt(0, short_name="v", is_count_switch=True)
+    log:     object = fargv.FargvStream(sys.stderr)
+    files:   list  = fargv.FargvPositional(default=[])
+```
+
+*Use subcommands in a dataclass?*
+
+```python
+from dataclasses import dataclass, field
+import fargv
+
+@dataclass
+class Config:
+    cmd: dict = field(default_factory=lambda: {
+        "train": {"lr": 0.01},
+        "eval":  {"dataset": "val"},
+    })
+
+cfg, _ = fargv.parse(Config, subcommand_return_type="nested")
+```
 
 ---
 

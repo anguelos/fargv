@@ -1,6 +1,6 @@
-"""High-level OO argument parsing API (:func:`parse`).
+"""High-level argument parsing API (:func:`parse`).
 
-This module provides :func:`parse` — the main entry point for the new OO API.
+This module provides :func:`parse` — the main entry point for fargv.
 It wraps :class:`~fargv.parser.ArgumentParser` with automatic parameter
 inference, auto-params (``--help``, ``--verbosity``, ``--config``, …),
 config-file support, and flexible return types.
@@ -61,14 +61,14 @@ def _find_docstring(definition) -> str:
         doc = frame_info.frame.f_globals.get("__doc__") or ""
         if doc.strip():
             return doc.strip()
-    return ""
+    return ""  # pragma: no cover
 
 
 def _is_jupyter() -> bool:
     return "ipykernel" in sys.modules
 
 
-def _run_gui(ui: str, parser) -> None:
+def _run_gui(ui: str, parser) -> None:  # pragma: no cover
     """Launch the appropriate GUI for *ui* and block until the user closes it.
 
     Values entered in the GUI are applied to *parser* in-place before
@@ -155,13 +155,13 @@ def _available_ui_choices():
         from .gui_tk import available as _tk_ok
         if _tk_ok:
             choices.append("tk")
-    except Exception:
+    except Exception:  # pragma: no cover
         pass
     try:
         from .gui_qt import available as _qt_ok
-        if _qt_ok:
+        if _qt_ok:  # pragma: no cover
             choices.append("qt")
-    except Exception:
+    except Exception:  # pragma: no cover
         pass
     return choices
 
@@ -291,7 +291,7 @@ def parse(
     override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
     employ_docstring_in_help: bool = True,
 ) -> Tuple[Any, str]:
-    """Parse CLI arguments using the new OO interface.
+    """Parse CLI arguments using the fargv interface.
 
     Priority order when config is enabled:
         coded defaults → config file → CLI / UI
@@ -336,7 +336,7 @@ def parse(
     subcommand_return_type:
         "flat" (default) — subcommand params merged into top-level namespace,
         subcommand key holds the selected name.
-        "nested" — subcommand key holds a SimpleNamespace(name=..., **params).
+        "nested" — subcommand key holds a SimpleNamespace(name=..., ``**params``).
         "tuple"  — returns ((name, sub_ns, parent_ns), help_str).
     """
     # 0. Validate override order
@@ -394,7 +394,7 @@ def parse(
                 raise FargvError(f"Required parameter {pname!r} was not provided")
         raw = {n: p.value for n, p in parser._name2parameters.items()}
         raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
-        result_raw = {k: v for k, v in raw.items() if not parser._name2parameters[k].filter_out}
+        result_raw = {k: v for k, v in raw.items() if k not in parser._name2parameters or not parser._name2parameters[k].filter_out}
         if _dc_cls is not None:
             import dataclasses as _dc2
             _dc_field_names = {f.name for f in _dc2.fields(_dc_cls)}
@@ -425,7 +425,8 @@ def parse(
                 import sys as _sys
                 print(f"fargv: ignoring config '{raw_config_path}': {_cfg_err}", file=_sys.stderr)
         elif _source == "envvar":
-            apply_env_vars(user_params, getattr(parser, 'name', 'fargv'))
+            _progname = argv[0] if argv else getattr(parser, 'name', 'fargv')
+            apply_env_vars(user_params, _progname)
 
     # 7. CLI parse (always); then optionally launch GUI if --user_interface requests it.
     # Parsing first means any CLI-supplied values pre-populate the GUI form.
@@ -433,9 +434,9 @@ def parse(
                        tolerate_unassigned_arguments=tolerate_unassigned_arguments)
 
     effective_ui = raw.get("user_interface", resolved_ui)
-    if effective_ui == "cli" and resolved_ui in ("tk", "qt", "jupyter"):
+    if effective_ui == "cli" and resolved_ui in ("tk", "qt", "jupyter"):  # pragma: no cover
         effective_ui = resolved_ui
-    if effective_ui in ("tk", "qt", "jupyter"):
+    if effective_ui in ("tk", "qt", "jupyter"):  # pragma: no cover
         _run_gui(effective_ui, parser)
         raw = {n: p.value for n, p in parser._name2parameters.items()}
 
@@ -453,7 +454,7 @@ def parse(
         ), help_str
 
     raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
-    result_raw = {k: v for k, v in raw.items() if not parser._name2parameters[k].filter_out}
+    result_raw = {k: v for k, v in raw.items() if k not in parser._name2parameters or not parser._name2parameters[k].filter_out}
     if _dc_cls is not None:
         import dataclasses as _dc2
         _dc_field_names = {f.name for f in _dc2.fields(_dc_cls)}

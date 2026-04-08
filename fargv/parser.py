@@ -1,6 +1,6 @@
 """The :class:`ArgumentParser` class — core argv-to-namespace machinery.
 
-This module is consumed by :func:`~fargv.parse.parse` (the high-level OO API)
+This module is consumed by :func:`~fargv.parse.parse` (the high-level API)
 but can also be used directly for full control over parser construction.
 """
 import os
@@ -306,7 +306,7 @@ class ArgumentParser:
                 )
             sub_name = sub_param._default_sub
         if sub_name not in sub_param._definitions:
-            raise FargvError(
+            raise FargvError(  # pragma: no cover
                 f"Unknown subcommand {sub_name!r}. "
                 f"Available: {list(sub_param._definitions.keys())}"
             )

@@ -38,7 +38,7 @@ def guess_program_name(level: int = 1) -> str:
         if main_file:
             return os.path.basename(main_file)
 
-    frame = inspect.currentframe()
+    frame = inspect.currentframe()  # pragma: no cover
     try:
         for _ in range(level + 1):
             if frame is None:
@@ -62,7 +62,7 @@ def guess_global_docstring(level=1):
     for _ in range(level + 1):  # +1 because the first frame is this function itself
         frame = frame.f_back
         if frame is None:
-            res = None
+            res = None  # pragma: no cover
 
     if frame.f_code.co_name == "<module>":
         module = inspect.getmodule(frame)

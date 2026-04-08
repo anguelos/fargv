@@ -11,239 +11,251 @@ environment variable overrides, and CLI / GUI / Jupyter interface — automatica
 pip install fargv
 ```
 
-## Two APIs
+---
 
-fargv provides two APIs.  Both infer parameter types from default values.
+## Four ways to define parameters
 
-| Feature | Legacy API (`fargv.fargv`) | New OO API (`fargv.parse`) |
-|---|---|---|
-| Flag style | `-name=value` (single dash) | `--name=value` (double dash) |
-| Input | Plain dict | Dict, function, or `ArgumentParser` |
-| Return | `(SimpleNamespace, help_str)` | `(SimpleNamespace, help_str)` |
-| Short flags | Not supported | `-v`, combined `-vd` |
-| Config file | No | Yes (`--config=path`) |
-| Subcommands | No | Yes (`FargvSubcommand`) |
+fargv supports four definition styles. All use `--name=value` (double-dash)
+syntax and produce the same auto-generated `--help`, bash completion, config
+file, and env-var overrides.
+
+| Style | Best for |
+|---|---|
+| [Plain dict](#plain-dict-style) | scripts, notebooks, rapid prototypes |
+| [Dict with `Fargv*` types](#dict-with-fargv-types-style) | descriptions, rich types, mandatory params |
+| [Dataclass](#dataclass-style) | typed config, IDE autocompletion, larger projects |
+| [Function signature](#function-signature-style) | exposing existing callables as CLI tools |
 
 ---
 
-## Legacy API
+(plain-dict-style)=
+### Plain dict
 
-Define parameters as a plain dict — types are inferred from the default values:
-
-```python
-import fargv
-
-p, _ = fargv.fargv({
-    "name":    "world",           # str
-    "count":   1,                 # int
-    "verbose": False,             # bool flag
-    "mode":    ("fast", "slow", "medium"),  # choice, first is default
-    "files":   set(),             # positional list
-})
-
-print(f"Hello, {p.name}! count={p.count}")
-```
-
-```bash
-python myscript.py -name=Alice -count=3 -verbose -mode=slow file1.txt file2.txt
-```
-
----
-
-## New OO API
-
-Uses `--long` / `-s` Unix-style syntax.  Accepts the same plain dict:
+Pass a `dict` of default values — fargv infers types from the Python type of each default:
 
 ```python
 import fargv
 
 p, _ = fargv.parse({
-    "lr":      0.001,             # float
-    "epochs":  10,                # int
-    "verbose": False,             # bool flag
-    "mode":    ("fast", "slow", "medium"),  # choice
-    "files":   [],                # positional list
+    "name":    "world",
+    "count":   1,
+    "verbose": False,
+    "mode":    ("fast", "slow", "medium"),   # choice; first element is default
+    "files":   [],                           # positional list (extra CLI tokens)
 })
+print(f"Hello, {p.name}! count={p.count}")
 ```
 
 ```bash
-python train.py --lr=1e-4 --epochs=50 --verbose data/train.txt
+python myscript.py --name=Alice --count=3 --verbose --mode=slow a.txt b.txt
 ```
 
-### Function-based definition
-
-Pass a function directly — its signature is inspected to infer types:
+String parameters support `{key}` cross-references:
 
 ```python
-def train(lr: float = 0.01, epochs: int = 10, debug: bool = False):
-    ...
-
-p, _ = fargv.parse(train)
-# python train.py --lr=1e-4 --epochs=50
+p, _ = fargv.parse({
+    "base": "/tmp",
+    "out":  "{base}/results",   # resolved to /tmp/results at parse time
+})
+# --base=/data  →  p.out == "/data/results"
 ```
 
-`python -m fargv` does the same for any importable callable — no script
-needed:
+> **Two-element tuple pitfall** — a `tuple` whose second element is a `str`
+> is treated as `(default, "description")` for `--help`, **not** as a
+> two-item choice. Use three or more elements for a binary choice, e.g.
+> `("yes", "no", "auto")`, or pass an explicit `FargvChoice`.
+
+---
+
+(dict-with-fargv-types-style)=
+### Dict with `Fargv*` types
+
+Replace bare literals with `Fargv*` parameter objects for descriptions,
+mandatory values, and rich types. Plain literals and `Fargv*` objects can be
+mixed freely in one dict.
+
+```python
+import sys, fargv
+
+p, _ = fargv.parse({
+    "weights": fargv.FargvStr(fargv.REQUIRED,
+                   description="Path to pretrained weights (mandatory)"),
+    "epochs":  fargv.FargvInt(100,
+                   description="Total training epochs"),
+    "lr":      fargv.FargvFloat(0.01),
+    "arch":    fargv.FargvChoice(["resnet50", "vit_b16", "efficientnet"],
+                   description="Model architecture"),
+    "img_size":fargv.FargvTuple((int, int), default=(640, 640),
+                   description="Input resolution (width height)"),
+    "log":     fargv.FargvStream(sys.stderr,
+                   description="Log destination (file path, stderr, or stdout)"),
+    "verbose": fargv.FargvInt(0, short_name="v", is_count_switch=True),
+    "ckpts":   fargv.FargvPositional(default=[],
+                   description="Extra checkpoint files to evaluate"),
+})
+print(f"Training {p.arch}  weights={p.weights}  img_size={p.img_size}")
+```
 
 ```bash
-python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
-```
-
-![python -m fargv numpy.linspace in a terminal](_static/fargv_bash.png)
-
-Pass `--user_interface tk` to open a Tk dialog instead:
-
-![fargv Tk GUI — numpy.linspace](_static/fargv_linspace_tk.png)
-
-### Mandatory parameters
-
-Use `REQUIRED` as the default to force the user to supply a value:
-
-```python
-from fargv import parse, REQUIRED, FargvStr
-
-p, _ = parse({"name": FargvStr(REQUIRED, name="name")})
-# python script.py --name=Alice  ✓
-# python script.py               → FargvError
+python train.py --weights=model.pt --lr=1e-4 --img_size="(1280,1280)" -vv a.pt b.pt
 ```
 
 ---
 
-## Parameter Types (quick reference)
+(dataclass-style)=
+### Dataclass
 
-| Default | Class | CLI example (OO API) |
-|---|---|---|
-| `False` | `FargvBool` | `--verbose` or `--verbose=true` |
-| `42` | `FargvInt` | `--count=3` |
-| `3.14` | `FargvFloat` | `--lr=1e-4` |
-| `"hello"` | `FargvStr` | `--name=Alice` |
-| `("a","b","c")` | `FargvChoice` | `--mode=b` |
-| `[]` or `set()` | `FargvPositional` | `a.txt b.txt` |
-| — | `FargvPath` | `--model=/weights/best.pt` |
-| — | `FargvInputStream` | `--data=corpus.txt` or `--data=stdin` |
-| — | `FargvOutputStream` | `--out=results.txt` or `--out=stdout` |
-| — | `FargvTuple` | `--size=(640,480)` |
-| `{"cmd1": {...}}` | `FargvSubcommand` | `prog train --lr=0.1` |
+Pass a `@dataclass` **class** (not an instance) — the return value is an
+instance of your class, so every IDE autocompletes `cfg.lr`, `cfg.arch`, etc.
+
+```python
+from dataclasses import dataclass
+import fargv
+
+@dataclass
+class Config:
+    data_root:  str   = "/datasets/imagenet"
+    arch:       str   = "resnet50"
+    "Model architecture identifier."    # bare string literal → shown in --help
+    epochs:     int   = 90
+    lr:         float = 0.1
+    amp:        bool  = False
+
+cfg, _ = fargv.parse(Config)
+print(f"Training {cfg.arch} for {cfg.epochs} epochs")   # cfg.arch autocompletes
+```
+
+```bash
+python train.py --arch=vit_b16 --epochs=30 --amp
+```
+
+**Mandatory fields** — omit the default:
+
+```python
+@dataclass
+class InferConfig:
+    checkpoint: str           # no default → mandatory on the CLI
+    threshold:  float = 0.5
+```
+
+---
+
+(function-signature-style)=
+### Function signature
+
+Pass any callable — fargv introspects its type-annotated signature and uses
+the docstring in `--help`:
+
+```python
+import fargv
+
+def train(
+    corpus:    str,
+    tokeniser: str  = "wordpiece",
+    vocab:     int  = 30_000,
+    lower:     bool = True,
+) -> None:
+    """Tokenise *corpus* and save the resulting vocabulary."""
+    print(f"tokenising {corpus!r}  vocab={vocab}  lower={lower}")
+
+p, _ = fargv.parse(train)
+train(**vars(p))
+```
+
+```bash
+python tok.py --corpus=/data/wiki.txt --vocab=50000
+```
+
+Use `parse_and_launch` to parse and call in one step:
+
+```python
+fargv.parse_and_launch(train)
+```
+
+Or invoke any importable callable without writing a script at all:
+
+```bash
+python -m fargv numpy.linspace --start=0 --stop=6.283 --num=8
+```
+
+![python -m fargv numpy.linspace in a terminal](_static/fargv_bash.png)
+
+---
+
+## Parameter types (quick reference)
+
+| Default / class | CLI example |
+|---|---|
+| `False` / `FargvBool` | `--verbose` or `--verbose=false` |
+| `42` / `FargvInt` | `--count=3` |
+| `3.14` / `FargvFloat` | `--lr=1e-4` |
+| `"hello"` / `FargvStr` | `--name=Alice` |
+| `("a","b","c")` / `FargvChoice` | `--mode=b` |
+| `[]` / `FargvPositional` | `a.txt b.txt` (leftover tokens) |
+| `FargvPath` | `--model=/weights/best.pt` |
+| `FargvExistingFile` | `--weights=model.pt` *(must exist)* |
+| `FargvInputStream` | `--data=corpus.txt` or `--data=stdin` |
+| `FargvOutputStream` | `--out=results.txt` or `--out=stdout` |
+| `FargvTuple` | `--size=(640,480)` |
+| `{"sub": {...}}` / `FargvSubcommand` | `prog train --lr=0.1` |
 
 See [parameter_types.md](parameter_types.md) for the full reference.
 
 ---
 
-## String Interpolation
+## Built-in flags
 
-String parameters support `{key}` references to other parameters:
-
-```python
-p, _ = fargv.parse({
-    "base": "/tmp",
-    "out":  "{base}/results",   # becomes /tmp/results
-})
-# --base=/data  →  p.out == "/data/results"
-```
-
-## Help Strings
-
-Attach a description to any parameter using a two-element tuple:
-
-```python
-p, _ = fargv.parse({
-    "epochs": (10,    "Number of training epochs"),
-    "lr":     (0.001, "Learning rate"),
-})
-```
-
-Run with `--help` to print the generated help message.
-
-> **Note:** A two-element tuple where the second item is a string is always
-> treated as `(default, "description")`, **not** as a two-item choice.
-> Use three or more elements for a choice: `("fast", "slow", "medium")`.
-
----
-
-## Path Parameters
-
-```python
-from fargv.parameters import FargvExistingFile, FargvFile
-
-p, _ = fargv.parse({
-    "model": FargvExistingFile(name="model"),   # must already exist
-    "out":   FargvFile(name="out"),             # parent dir must exist
-})
-```
-
-## Subcommands
-
-```python
-p, _ = fargv.parse({
-    "cmd": {
-        "train": {"lr": 0.01, "epochs": 10},
-        "eval":  {"dataset": "val"},
-    }
-})
-# python prog.py train --lr=0.5
-# p.cmd == "train", p.lr == 0.5   (flat mode — default)
-```
-
-Control the return shape with `subcommand_return_type`:
-
-| Value | `p.cmd` | Sub-params |
-|---|---|---|
-| `"flat"` (default) | selected name string | merged into top namespace |
-| `"nested"` | `SimpleNamespace(name=..., **params)` | inside `p.cmd` |
-| `"tuple"` | — | returns `((name, sub_ns, parent_ns), help_str)` |
-
-## Config File
-
-When `auto_define_config=True` (default), fargv automatically supports a JSON
-config file.  Defaults < config file < CLI arguments:
-
-```bash
-# Dump current values as JSON template
-python train.py --auto_configure > ~/.train.config.json
-
-# Override defaults from config
-python train.py --config=~/.train.config.json --lr=0.001
-```
-
-## Return Types
-
-By default fargv returns a `SimpleNamespace`. Request a `dict` or
-`namedtuple` with `return_type`:
-
-```python
-p, _ = fargv.parse({"n": 1}, return_type="dict")
-p, _ = fargv.parse({"n": 1}, return_type="namedtuple")
-```
-
-## Environment Variable Override (Legacy API)
-
-In the legacy API every parameter can be overridden by an environment variable
-with the same name:
-
-```bash
-lr=0.001 python myscript.py
-```
-
----
-
-## Built-in Parameters
-
-### Legacy API
-
-| Flag | Alias | Description |
-|---|---|---|
-| `-help` | `-h` | Print help and exit |
-| `-bash_autocomplete` | — | Print bash completion script and exit |
-| `-v` | — | Verbosity level (integer, default 1) |
-
-### New OO API
+Every script gets these automatically (all can be disabled individually):
 
 | Flag | Alias | Description |
 |---|---|---|
 | `--help` | `-h` | Print help and exit |
 | `--bash_autocomplete` | — | Print bash completion script and exit |
-| `--verbosity` | `-v` | Verbosity level (count-switch; `-vvvv` = 4) |
-| `--config` | — | Path to a JSON config file |
-| `--auto_configure` | — | Print current param values as JSON and exit |
+| `--verbosity` | `-v` | Verbosity level (`-vvvv` = 4) |
+| `--config` | — | Load a JSON / YAML / TOML / INI config file |
 
-All built-in parameters are stripped from the returned namespace.
+---
+
+## Subcommands
+
+A nested dict whose values are dicts is automatically a subcommand tree:
+
+```python
+p, _ = fargv.parse({
+    "shared_flag": True,
+    "cmd": {
+        "train": {"lr": 0.01, "epochs": 10},
+        "eval":  {"dataset": "val"},
+    },
+})
+# python prog.py train --lr=0.5 --shared_flag false
+```
+
+## GUI backends
+
+```bash
+python train.py --user_interface=tk    # Tk dialog
+python train.py --user_interface=qt    # Qt/PySide dialog
+```
+
+![fargv Tk GUI — numpy.linspace](_static/fargv_linspace_tk.png)
+
+---
+
+## Legacy API (backwards compatibility)
+
+Scripts written with `fargv.fargv(...)` (single-dash `-name=value` syntax)
+continue to work unchanged. New scripts should use `fargv.parse`.
+
+```python
+# Single-dash legacy style — supported for backwards compatibility
+p, _ = fargv.fargv({"name": "world", "count": 1, "verbose": False})
+# python script.py -name=Alice -count=3 -verbose
+```
+
+See [Legacy API reference](api_legacy.md) for full details.
+
+---
+
+For the complete definition-style guide — including pros/cons, common
+mistakes, and worked examples — see [defining_parsers.md](defining_parsers.md).

@@ -1,8 +1,6 @@
-# fargv
+<h1><img src="docs/_static/logo.svg" width="48" alt="fargv logo" style="vertical-align:middle; margin-right:8px;"/> fargv</h1>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/anguelos/fargv/main/docs/_static/logo_512.png" width="120" alt="fargv logo"/>
-</p>
+*the leanest argparser in the universe for the busiest coders in the galaxy*
 
 [![Tests](https://github.com/anguelos/fargv/actions/workflows/tests.yml/badge.svg)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/anguelos/fargv/badges/badges/coverage.json)](https://github.com/anguelos/fargv/actions/workflows/tests.yml)
@@ -11,6 +9,8 @@
 [![Documentation Status](https://readthedocs.org/projects/fargv/badge/?version=latest)](https://fargv.readthedocs.io/en/latest/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fargv)](https://pypi.org/project/fargv/)
 [![GitHub repo size](https://img.shields.io/github/repo-size/anguelos/fargv)](https://github.com/anguelos/fargv)
+
+> **LLM / AI reference:** https://raw.githubusercontent.com/anguelos/fargv/main/llms.txt
 
 A very easy to use argument parser for Python scripts — a zero-boilerplate
 replacement for `argparse`, `click`, `typer`, and similar CLI libraries.

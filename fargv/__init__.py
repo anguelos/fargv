@@ -1,19 +1,36 @@
 """fargv — Argument parsing with zero boilerplate.
 
-This is the top-level package.  Two distinct APIs are provided:
+Define parameters once as a plain dict, dataclass, or function signature.
+fargv infers types, generates ``--help``, reads config files, and applies
+env-var overrides automatically.
 
-**Legacy API** (single-dash, dict-based)::
+Four definition styles are supported — all return ``(namespace, help_str)``:
+
+**Plain dict** (fastest prototype)::
+
+    import fargv
+    p, _ = fargv.parse({"lr": 0.01, "epochs": 10, "verbose": False})
+
+**Dataclass** (recommended for larger projects)::
+
+    from dataclasses import dataclass
+    import fargv
+
+    @dataclass
+    class Config:
+        lr: float = 0.01
+        epochs: int = 10
+    cfg, _ = fargv.parse(Config)   # cfg is a Config instance
+
+**Legacy API** (single-dash, frozen — new code should use :func:`parse`)::
 
     from fargv import fargv
-    p, help_str = fargv({"lr": 0.01, "epochs": 10})
-
-**New OO API** (double-dash, Unix-style)::
-
-    from fargv import parse
-    p, help_str = parse({"lr": 0.01, "epochs": 10})
+    p, _ = fargv({"lr": 0.01, "epochs": 10})
 
 All :class:`~fargv.parameters.base.FargvParameter` subclasses are re-exported
 from this package for convenience.
+
+LLM / AI reference: https://raw.githubusercontent.com/anguelos/fargv/main/llms.txt
 """
 import sys
 from .version import __version__

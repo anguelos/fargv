@@ -1,0 +1,26 @@
+# fargv development requirements
+# Install with: pip install -r requirements-dev.txt
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest
+pytest-cov
+
+# ── Linting / formatting ──────────────────────────────────────────────────────
+ruff
+
+# ── Documentation (Sphinx + MyST) ────────────────────────────────────────────
+sphinx
+myst-parser
+sphinx-copybutton
+sphinx-rtd-theme
+sphinxcontrib-ansi    # ANSI colour rendering in docs (ansi-block directive)
+graphviz              # UML/inheritance diagrams (sphinx.ext.inheritance_diagram)
+
+# ── Examples ──────────────────────────────────────────────────────────────────
+# examples/sklearn_demo.py uses scikit-learn
+scikit-learn
+
+# ── Optional GUI backends (not required for core or tests) ───────────────────
+# Uncomment as needed:
+# PySide6          # Qt GUI backend (--user_interface=qt)
+# ipywidgets       # Jupyter widget backend (--user_interface=jupyter)

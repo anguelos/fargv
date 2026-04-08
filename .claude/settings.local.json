@@ -6,7 +6,9 @@
       "Bash(make test:*)",
       "Bash(make unittest:*)",
       "Bash(make htmldoc:*)",
-      "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/test/unittest/*.py)"
+      "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/test/unittest/*.py)",
+      "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/fargv/*.py /home/anguelos_ro/workspace/src/fargv/fargv/parameters/*.py)",
+      "Bash(pip show:*)"
     ]
   }
 }

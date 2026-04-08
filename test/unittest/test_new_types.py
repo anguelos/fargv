@@ -588,6 +588,84 @@ class TestDumpConfig:
         data = json.loads(out)
         assert data["f"] == "/tmp"
 
+    def test_subcommand_all_branches_included(self):
+        """dump_config emits all subcommand branches, not just the selected one."""
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01, "epochs": 10}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        out = dump_config(p)
+        data = json.loads(out)
+        assert "cmd" in data
+        assert set(data["cmd"].keys()) == {"train", "eval"}
+        assert data["cmd"]["train"]["lr"] == pytest.approx(0.01)
+        assert data["cmd"]["train"]["epochs"] == 10
+        assert data["cmd"]["eval"]["dataset"] == "val"
+
+    def test_subcommand_branch_config_applied_then_dumped(self):
+        """Config applied to sub-parsers is reflected in dump_config output."""
+        from fargv.config import apply_config
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01, "epochs": 10}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        sub_param = p._name2parameters["cmd"]
+        sub_param._ensure_sub_parsers()
+        apply_config(
+            p._name2parameters,
+            {"cmd": {"train": {"lr": 0.5}}},
+            config_path=None,
+        )
+        out = dump_config(p)
+        data = json.loads(out)
+        assert data["cmd"]["train"]["lr"] == pytest.approx(0.5)
+        assert data["cmd"]["train"]["epochs"] == 10   # unchanged default
+        assert data["cmd"]["eval"]["dataset"] == "val"
+
+    def test_subcommand_roundtrip(self):
+        """dump_config output can be loaded back via apply_config on all branches."""
+        from fargv.config import apply_config
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"fit": {"lr": 0.01, "epochs": 5}, "predict": {"threshold": 0.5}},
+            name="cmd",
+        ))
+        # Dump defaults
+        out = dump_config(p)
+        data = json.loads(out)
+
+        # Build a fresh parser and apply the dumped config
+        p2 = ArgumentParser()
+        p2._add_parameter(FargvSubcommand(
+            {"fit": {"lr": 0.99, "epochs": 99}, "predict": {"threshold": 0.99}},
+            name="cmd",
+        ))
+        sub2 = p2._name2parameters["cmd"]
+        sub2._ensure_sub_parsers()
+        apply_config(p2._name2parameters, data, config_path=None)
+
+        fit_params     = sub2._sub_parsers["fit"]._name2parameters
+        predict_params = sub2._sub_parsers["predict"]._name2parameters
+        assert fit_params["lr"].value     == pytest.approx(0.01)
+        assert fit_params["epochs"].value == 5
+        assert predict_params["threshold"].value == pytest.approx(0.5)
+
+    def test_subcommand_stream_omitted_from_branch(self):
+        """Stream params inside a subcommand branch are not included in dump."""
+        import sys
+        from fargv.parameters import FargvOutputStream
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"run": {"count": 3, "out": FargvOutputStream(name="out")}},
+            name="cmd",
+        ))
+        out = dump_config(p)
+        data = json.loads(out)
+        assert data["cmd"]["run"]["count"] == 3
+        assert "out" not in data["cmd"]["run"]
+
 
 class TestScanConfigPath:
     def test_equals_form(self):
@@ -679,3 +757,93 @@ class TestSubcommandConfig:
         # eval's dataset should not bleed into train result
         assert "dataset" not in result["cmd"]["result"]
         assert result["cmd"]["name"] == "train"
+
+    def test_config_string_value_for_subcommand_raises(self):
+        """apply_config raises FargvError when config tries to select a subcommand."""
+        from fargv.config import apply_config
+        from fargv.parameters import FargvError
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        with pytest.raises(FargvError, match="cannot be selected via a config file"):
+            apply_config(p._name2parameters, {"cmd": "train"}, config_path="cfg.json")
+
+    def test_parse_raises_when_config_selects_subcommand(self):
+        """fargv.parse() raises FargvError when config file tries to select subcommand."""
+        import json, tempfile, os, fargv
+        from fargv.parameters import FargvError
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"cmd": "eval"}, f)
+            cfg = f.name
+        try:
+            with pytest.raises(FargvError, match="cannot be selected via a config file"):
+                fargv.parse(
+                    {"cmd": {"train": {"lr": 0.01}, "eval": {"dataset": "val"}}},
+                    given_parameters=["prog", f"--config={cfg}"],
+                    auto_define_bash_autocomplete=False, auto_define_verbosity=False,
+                    auto_define_user_interface=False, auto_define_help=False,
+                )
+        finally:
+            os.unlink(cfg)
+
+    def test_env_var_selects_subcommand_raises(self):
+        """apply_env_vars raises FargvError when an env var matches a subcommand name."""
+        import os
+        from fargv.config import apply_env_vars
+        from fargv.parameters import FargvError
+        p = ArgumentParser()
+        p._add_parameter(FargvSubcommand(
+            {"train": {"lr": 0.01}, "eval": {"dataset": "val"}},
+            name="cmd",
+        ))
+        env_backup = os.environ.get("PROG_CMD")
+        os.environ["PROG_CMD"] = "eval"
+        try:
+            with pytest.raises(FargvError, match="attempts to select subcommand"):
+                apply_env_vars(p._name2parameters, "prog")
+        finally:
+            if env_backup is None:
+                del os.environ["PROG_CMD"]
+            else:
+                os.environ["PROG_CMD"] = env_backup
+
+    def test_parse_raises_when_env_var_selects_subcommand(self):
+        """fargv.parse() raises FargvError when an env var tries to select a subcommand."""
+        import os, fargv
+        from fargv.parameters import FargvError
+        env_backup = os.environ.get("PROG_CMD")
+        os.environ["PROG_CMD"] = "eval"
+        try:
+            with pytest.raises(FargvError, match="attempts to select subcommand"):
+                fargv.parse(
+                    {"cmd": {"train": {"lr": 0.01}, "eval": {"dataset": "val"}}},
+                    given_parameters=["prog"],
+                    auto_define_bash_autocomplete=False, auto_define_verbosity=False,
+                    auto_define_user_interface=False, auto_define_help=False,
+                )
+        finally:
+            if env_backup is None:
+                del os.environ["PROG_CMD"]
+            else:
+                os.environ["PROG_CMD"] = env_backup
+
+    def test_config_branch_values_still_work(self):
+        """Setting per-branch param values via config is still allowed and applied."""
+        import json, tempfile, os, fargv
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"cmd": {"train": {"lr": 0.5, "epochs": 20}}}, f)
+            cfg = f.name
+        try:
+            p, _ = fargv.parse(
+                {"cmd": {"train": {"lr": 0.01, "epochs": 10}, "eval": {"dataset": "val"}}},
+                given_parameters=["prog", "train", f"--config={cfg}"],
+                auto_define_bash_autocomplete=False, auto_define_verbosity=False,
+                auto_define_user_interface=False, auto_define_help=False,
+                subcommand_return_type="nested",
+            )
+            assert p.cmd.lr == pytest.approx(0.5)
+            assert p.cmd.epochs == 20
+        finally:
+            os.unlink(cfg)

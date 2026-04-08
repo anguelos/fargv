@@ -1,4 +1,4 @@
-"""Compatibility shim re-exporting the full OO API from a single module.
+"""Compatibility shim re-exporting the full fargv API from a single module.
 
 This module exists so that existing code that does
 ``from fargv.oo_fargv import ...`` continues to work after the package was

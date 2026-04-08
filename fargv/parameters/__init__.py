@@ -1,4 +1,4 @@
-"""Parameter type classes for the fargv OO API.
+"""Parameter type classes for the fargv API.
 
 Re-exports all concrete :class:`~fargv.parameters.base.FargvParameter` subclasses
 so callers can simply ``from fargv.parameters import FargvInt, FargvStr, ...``.

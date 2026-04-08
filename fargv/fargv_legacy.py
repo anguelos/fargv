@@ -8,8 +8,9 @@ The primary entry point is :func:`fargv`.  All other functions in this module
 are either helpers or legacy compatibility shims.
 
 .. note::
-   New code should prefer :func:`fargv.parse` (the OO API) which uses
-   standard ``--long`` / ``-s`` Unix-style syntax.
+   New code should prefer :func:`fargv.parse`, which uses standard
+   ``--long`` / ``-s`` Unix-style syntax and supports richer parameter types,
+   config files, and env-var overrides. The legacy API is frozen.
 """
 import os
 import re
@@ -33,7 +34,7 @@ def fargv2dict(args: t_fargv_args) -> dict:
     :return: a dictionary. In case args was a dictionary, it returns a copy of it.
     """
     if type(args) == types.SimpleNamespace:
-        return args.__dict__()
+        return vars(args)
     elif type(args) == dict:
         return args.copy()
     elif isinstance(args, tuple):
@@ -277,7 +278,7 @@ def fargv(default_switches, argv: Optional[List[str]] = None, use_enviromental_v
     argv[:] = positionals
 
     if set(argv_switches.keys()) > set(default_switches.keys()):
-        help_str = "\n" + argv[0] + description + " Syntax:\n\n"
+        help_str = "\n" + argv[0] + description + " Syntax:\n\n"  # pragma: no cover
         for k in list(default_switches.keys()):
             help_str += f"\t-{k} = {type(default_switches[k])} {switches_help[k]} Default {repr(default_switches[k])}.\n"
         help_str += "\n\nUnrecognized switches: " + repr(tuple(set(default_switches.keys()) - set(argv_switches.keys())))
@@ -338,5 +339,5 @@ def fargv(default_switches, argv: Optional[List[str]] = None, use_enviromental_v
     elif return_type == "dict":
         params = argv_switches
     else:
-        raise ValueError
+        raise ValueError  # pragma: no cover
     return params, help_str

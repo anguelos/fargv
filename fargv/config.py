@@ -81,8 +81,16 @@ def apply_config(
         )
     for key, val in config.items():
         param = name2parameters[key]
-        if getattr(param, "is_subcommand", False) and isinstance(val, dict):
-            # Apply each sub-config to the matching sub-parser
+        if getattr(param, "is_subcommand", False):
+            if not isinstance(val, dict):
+                from .parameters import FargvError
+                raise FargvError(
+                    f"Config file '{config_path}': subcommand {key!r} cannot be "
+                    f"selected via a config file (got {val!r}). "
+                    "Config may only set per-branch parameter values using the "
+                    "nested dict format: {<subcommand>: {<branch>: {param: value}}}"
+                )
+            # Apply each branch's values to its sub-parser
             param._ensure_sub_parsers()
             for sub_name, sub_cfg in val.items():
                 if sub_name in param._sub_parsers and isinstance(sub_cfg, dict):
@@ -118,8 +126,33 @@ def apply_env_vars(
     for pname, param in name2parameters.items():
         env_key = prefix + pname.upper()
         param._env_var_name = env_key          # stamp for help display
-        if env_key in os.environ:
-            param.evaluate(os.environ[env_key])
+        if env_key not in os.environ:
+            continue
+        if getattr(param, "is_subcommand", False):
+            from .parameters import FargvError
+            raise FargvError(
+                f"Environment variable '{env_key}' attempts to select subcommand "
+                f"'{pname}', but subcommand selection is only allowed via the CLI. "
+                f"Unset '{env_key}' or select the subcommand on the command line."
+            )
+        param.evaluate(os.environ[env_key])
+
+
+def _dump_param_value(val):
+    """Serialise a single parameter value to a JSON-compatible type.
+
+    Returns ``(serialised, include)`` — when *include* is ``False`` the
+    parameter should be omitted from the output (e.g. streams).
+    """
+    from pathlib import Path as _Path
+    import io as _io
+    if val is None:
+        return val, True
+    if isinstance(val, _Path):
+        return str(val), True
+    if isinstance(val, _io.IOBase):
+        return None, False
+    return val, True
 
 
 def dump_config(parser, exclude=None) -> str:
@@ -127,6 +160,19 @@ def dump_config(parser, exclude=None) -> str:
 
     File-like / stream values are omitted; pathlib.Path values are
     converted to strings.
+
+    For :class:`~fargv.parameters.subcommand.FargvSubcommand` parameters,
+    **all** subcommand branches are included using their current default
+    values so that the resulting config file can be loaded regardless of
+    which subcommand is selected at runtime::
+
+        {
+          "verbose": false,
+          "cmd": {
+            "train": {"lr": 0.01, "epochs": 10},
+            "eval":  {"dataset": "val"}
+          }
+        }
     """
     from pathlib import Path as _Path
     import io as _io
@@ -136,15 +182,23 @@ def dump_config(parser, exclude=None) -> str:
     for name, param in parser._name2parameters.items():
         if name in exclude:
             continue
-        val = param.value
-        if val is None:
-            data[name] = val
-        elif isinstance(val, _Path):
-            data[name] = str(val)
-        elif isinstance(val, (_io.IOBase,)):
-            continue   # streams are not serialisable
+        if getattr(param, "is_subcommand", False):
+            param._ensure_sub_parsers()
+            sub_data: Dict[str, Any] = {}
+            for sub_name, sp in param._sub_parsers.items():
+                branch: Dict[str, Any] = {}
+                for pname, pparam in sp._name2parameters.items():
+                    if getattr(pparam, "filter_out", False):
+                        continue
+                    serialised, include = _dump_param_value(pparam.value)
+                    if include:
+                        branch[pname] = serialised
+                sub_data[sub_name] = branch
+            data[name] = sub_data
         else:
-            data[name] = val
+            serialised, include = _dump_param_value(param.value)
+            if include:
+                data[name] = serialised
     return json.dumps(data, indent=2, default=str)
 
 

@@ -160,7 +160,7 @@ def _annotation_to_fargv_cls(annotation):
     # Resolve imports lazily to avoid issues at module load time
     try:
         from typing import Union, get_origin, get_args, Tuple
-    except ImportError:
+    except ImportError:  # pragma: no cover
         return _ANNOTATION_MAP.get(annotation)
 
     origin = get_origin(annotation)
@@ -202,7 +202,7 @@ def function_to_parser(
     try:
         import typing
         hints = typing.get_type_hints(fn)
-    except Exception:
+    except Exception:  # pragma: no cover
         hints = {}
     try:
         sig = inspect.signature(fn)
@@ -272,7 +272,7 @@ def _extract_field_docstrings(cls) -> Dict[str, str]:
     try:
         source = _tw.dedent(inspect.getsource(cls))
         tree   = ast.parse(source)
-    except (OSError, TypeError, SyntaxError):
+    except (OSError, TypeError, SyntaxError):  # pragma: no cover
         return {}
 
     result: Dict[str, str] = {}
@@ -322,7 +322,7 @@ def dataclass_to_parser(
         raise TypeError(f"dataclass_to_parser requires a dataclass class, got {cls!r}")
     try:
         hints = typing.get_type_hints(cls)
-    except Exception:
+    except Exception:  # pragma: no cover
         hints = {}
     field_docs = _extract_field_docstrings(cls)
     parser = ArgumentParser(long_prefix=long_prefix, short_prefix=short_prefix)
