@@ -1,5 +1,7 @@
 #asciinema recordings
 *.cast
+examples/scenario/agg
+examples/scenario/example.txt
 
 # Editors
 .vscode/

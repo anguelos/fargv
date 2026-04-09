@@ -70,3 +70,29 @@ Five notebook sections covering every Jupyter-specific usage pattern:
 pip install fargv ipywidgets
 jupyter lab examples/jupyter/fargv_jupyter_demo.ipynb
 ```
+
+## Scenario
+
+Simple word count script and how to extend it with fargv.
+This is the code employed to record a GIF demonstrating employment to total novices.
+
+Requirements (other than standard python/unix tools):
+**  pandas: The demo funtion using pandas
+**  asciinema: To record the screen cast.
+**  bat: To render a source file with highlighting.
+**  git-delta: To color print a diff
+**  agg : To make a GIF from the screen cat.
+
+###  Install requirements in ubuntu
+```bash
+pip install asciinema pandas
+sudo apt-get install wget bat git-delta
+wget https://github.com/asciinema/agg/releases/latest/download/agg-x86_64-unknown-linux-gnu -O agg
+chmod 755 agg
+```
+
+### Make CLI demo.gif
+```bash
+asciinema rec /tmp/demo.cast --overwrite --command="bash ./scenario.sh"
+./agg /tmp/demo.cast /tmp/demo.gif
+```
