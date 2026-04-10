@@ -5,9 +5,11 @@
 At the start of every session, read these skill files:
 - `.claude/skills/commisar/SKILL.md`
 - `.claude/skills/focus-group/SKILL.md`
+- `.claude/skills/add-test/SKILL.md`
 
 When the user says "commisar" , follow the commisar skill instructions.
 When the user says "focus-group", follow the focus-group skill instructions.
+When the user says "add-test", follow the add-test skill instructions.
 
 
 ## Project Overview
@@ -150,7 +152,8 @@ The subcommand token may appear anywhere in argv; flags are routed by name not p
 
 ## Planned Features
 
-1. **`src/` layout migration** — move `fargv/` → `src/fargv/`
+1. **Remove `init_config_if_missing`** — auto-creating config files on first run is dangerous: it silently persists stale defaults that survive code changes and cause subtle override bugs (see nprenet's `FargvPositional` report). Config should only be created explicitly via `--config=//json` etc.
+2. **`src/` layout migration** — move `fargv/` → `src/fargv/`
 2. **Sphinx docs** — MyST (Markdown), auto-generated from docstrings
 3. **Sub-command design with dataclasses** — nested dataclass fields as subcommand definitions
 4. **Google Fire-like decorator** — `@fargv.cli` wrapping any function
@@ -163,6 +166,23 @@ The subcommand token may appear anywhere in argv; flags are routed by name not p
 - `fargv/__init__.py` imports `fargv_legacy` — exists at `fargv/fargv_legacy.py`
 - `setup.py` calls `open('README.md').read()` — `README.md` is deleted; fix before publishing
 - `.pypi_token` exists — **never commit this file**
+
+---
+
+## Test Tiers
+
+Tests live in `test/unittest/`. Three tiers with different agent permissions:
+
+| Tier | Files | Agent agency |
+|---|---|---|
+| 1 — Unit/Coverage | `test_legacy.py`, `test_oo.py`, `test_parse.py`, `test_autocomplete.py`, `test_new_types.py`, `test_coverage*.py`, `test_coverage_boost.py` | Full — add/modify/delete freely |
+| 2 — Integration | `test_integration.py` (create when needed) | May modify; flag non-trivial changes first |
+| 3 — Specification | `test_spec.py` (and `test_spec_*.py`) | None — never touch without explicit user approval |
+
+Tier 3 tests must have a docstring: one-sentence invariant, `Added: YYYY-MM-DD, initiated by: <name>`.
+Default initiator is Anguelos. Regressions add a third line: `Regression: <short description>.`
+
+When adding tests, follow the `add-test` skill (`.claude/skills/add-test/SKILL.md`).
 
 ---
 

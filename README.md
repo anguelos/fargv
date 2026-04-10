@@ -22,6 +22,8 @@ configuration.
 
 ![fargv data-flow: definition → config → env vars → CLI / GUI / Jupyter](docs/_static/fargv_flow.svg)
 
+<a href="docs/_static/demo.gif"><img src="docs/_static/demo.gif" width="400" alt="fargv demo"/></a>
+
 ## Features
 
 **Multiple definition styles** — choose the style that fits your script:

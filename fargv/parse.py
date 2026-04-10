@@ -416,8 +416,7 @@ def parse(
                 raw_config_path = parser._name2parameters.get("config", None)
                 raw_config_path = raw_config_path._value if raw_config_path else None
             if raw_config_path:
-                from .config import init_config_if_missing
-                init_config_if_missing(raw_config_path, parser, exclude=_AUTO_PARAMS)
+                pass  # auto-creating config files is disabled — use --config=//json to create one explicitly
             try:
                 cfg = load_config(raw_config_path)
                 apply_config(user_params, cfg, raw_config_path)
