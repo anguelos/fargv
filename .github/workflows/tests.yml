@@ -26,9 +26,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install coverage
 
       - name: Run tests
-        run: python -m pytest test/unittest/ -q --cov=fargv --cov-report=term-missing --cov-report=json --cov-branch
+        run: |
+          coverage run --branch -m pytest test/unittest/ -q
+          coverage report --include="fargv/*" -m
+          coverage json --include="fargv/*"
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'

@@ -5,11 +5,12 @@ SPHINX      := sphinx-build
 SRC_DIR     := fargv
 TEST_DIR    := test
 UNITTEST_DIR := test/unittest
+HEAVY_DIR    := test/heavy
 BUILD_DIR   := dist
 DOC_DIR     := docs
 DOC_BUILD   := docs/_build
 
-.PHONY: all clean build doc htmldoc pdfdoc test testfull unittest testlint autolint
+.PHONY: all clean build doc htmldoc pdfdoc test testfull unittest heavytest testlint autolint
 
 all: build
 
@@ -47,6 +48,9 @@ testfull:
 
 unittest:
 	$(PYTEST) $(UNITTEST_DIR) 		--cov=$(SRC_DIR) 		--cov-config=pyproject.toml 		--cov-report=term-missing 		--cov-report=html
+
+heavytest:
+	$(PYTEST) $(HEAVY_DIR) -v
 
 # ── Linting ───────────────────────────────────────────────────────────────────
 

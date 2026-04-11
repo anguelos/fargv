@@ -27,3 +27,6 @@ omit = [
     "*/gui_ipywidgets.py",
     "*/ipywidgets.py",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["test/unittest"]
