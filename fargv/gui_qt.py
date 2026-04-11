@@ -33,7 +33,7 @@ for _name in ("PyQt6", "PyQt5", "PySide6", "PySide2"):
 
 from .parameters import (
     FargvBool, FargvInt, FargvFloat, FargvStr,
-    FargvChoice, FargvPositional,
+    FargvChoice, FargvVariadic,
 )
 from .parse import _AUTO_PARAMS
 
@@ -146,11 +146,11 @@ def _make_param_widget(param, QLineEdit, QCheckBox, QComboBox,
     if isinstance(param, FargvFloat):
         return "float", _make_numeric_line_edit(param, QLineEdit, QDoubleValidator, QIntValidator)
 
-    if isinstance(param, FargvPositional):
+    if isinstance(param, FargvVariadic):
         w = QLineEdit()
         w.setText(" ".join(str(x) for x in (param.value or [])))
         w.setPlaceholderText("space-separated values")
-        return "positional", w
+        return "variadic", w
 
     # FargvStr and anything else string-like
     w = QLineEdit()
@@ -182,7 +182,7 @@ def _read_widget(kind, w):
         return w.isChecked()
     if kind == "choice":
         return w.currentText()
-    if kind == "positional":
+    if kind == "variadic":
         return w.text().split() if w.text().strip() else []
     return w.text()   # int, float, str — evaluate() handles string→type
 
@@ -197,7 +197,7 @@ def show(parser, title: str = "fargv") -> bool:
     * :class:`~fargv.parameters.FargvFloat`      → QLineEdit (float validation + colour feedback)
     * :class:`~fargv.parameters.FargvStr`        → QLineEdit
     * :class:`~fargv.parameters.FargvChoice`     → QComboBox
-    * :class:`~fargv.parameters.FargvPositional` → QLineEdit (space-separated)
+    * :class:`~fargv.parameters.FargvVariadic` → QLineEdit (space-separated)
     * :class:`~fargv.parameters.FargvSubcommand` → QComboBox selector +
       QStackedWidget of per-subcommand QGroupBox forms.
 

@@ -23,47 +23,58 @@ type.
 | `bool` | boolean switch | `--verbose` / `--verbose false` |
 | `str` | string | `--output_dir ./out` |
 | `tuple` (≥ 3 items) | choice (first = default) | `--mode train` |
-| `list` | positional list | leftover tokens |
+| `list` | variadic list | leftover tokens |
 
 ```python
 import fargv
 
-# ── Machine Learning: train a classifier ─────────────────────────────────────
+# ── Computer Vision: object detection pipeline ───────────────────────────────
 p, _ = fargv.parse({
-    "data_dir":    "/datasets/imagenet",
-    "output_dir":  "{data_dir}/checkpoints",   # {key} interpolation
-    "model":       ("resnet50", "vit_b16", "efficientnet_b0"),
-    "epochs":      90,
-    "lr":          0.1,
-    "batch_size":  256,
-    "amp":         False,
-    "workers":     8,
-    "files":       [],        # positional: extra paths, if any
+    "data_dir":   "/datasets/coco",
+    "output_dir": "{data_dir}/runs",                                # {key} string reference
+    "arch":       ("yolov8n", "yolov8s", "yolov8m", "yolov8l"),    # choice (first = default)
+    "img_size":   fargv.FargvTuple((int, int), default=(640, 640)), # typed tuple (needs FargvTuple)
+    "epochs":     50,
+    "lr":         0.01,
+    "amp":        False,
+    "extras":     [],                                               # variadic: unmatched tokens
+    "cmd": {                                                        # subcommand
+        "train": {"warmup": 3, "mosaic": True},
+        "eval":  {"split": "val", "half": False},
+    },
 })
-print(f"Training {p.model} for {p.epochs} epochs  lr={p.lr}  amp={p.amp}")
+print(f"arch={p.arch}  img_size={p.img_size}  out={p.output_dir}")
 ```
 
+> `FargvTuple` is the one feature that requires an explicit `Fargv*` object even in
+> the plain-dict style — there is no Python literal that encodes "fixed-length typed tuple"
+> without being mistaken for a choice (3-element tuple) or a list.
+
 ```bash
-python train.py --model=vit_b16 --epochs=30 --amp
-python train.py --data_dir=/data/imagenet --lr=0.01 --batch_size=128
+python detect.py --arch=yolov8m --img_size=1280,1280 train --warmup=5
+python detect.py --data_dir=/data/coco eval --split=test
 ```
 
 ```python
 # ── Data Analytics: run a report pipeline ────────────────────────────────────
 p, _ = fargv.parse({
     "db_url":    "postgresql://localhost/analytics",
-    "format":    ("parquet", "csv", "json"),
+    "report":    ("parquet", "csv", "json"),
     "date_from": "2024-01-01",
-    "date_to":   "2024-12-31",
+    "date_to":   "{date_from}",     # echoes date_from unless overridden
     "dry_run":   False,
     "tables":    [],
+    "cmd": {
+        "export": {"compress": True},
+        "preview": {"rows": 20},
+    },
 })
 ```
 
 **Common mistakes**
 
 ```python
-# ✗ set() works as positional in legacy API but is ambiguous — prefer list
+# ✗ set() works as variadic in legacy API but is ambiguous — prefer list
 "files": set()
 
 # ✓ Use list
@@ -140,36 +151,34 @@ import fargv
 p, _ = fargv.parse({
     "images_dir":  fargv.FargvStr("/data/coco/images",
                        description="Root directory of COCO-style images"),
+    "output_dir":  fargv.FargvStr("{images_dir}/../runs",          # {key} string reference
+                       description="Output dir (inherits images_dir by default)"),
     "annotations": fargv.FargvExistingFile("/data/coco/instances_train.json",
-                       description="COCO annotations JSON file (must exist)"),
-    "output_dir":  fargv.FargvStr("{images_dir}/../runs",
-                       description="Where to write checkpoints and logs"),
+                       description="COCO annotations JSON (must exist)"),
     "arch":        fargv.FargvChoice(["yolov8n", "yolov8s", "yolov8m", "yolov8l"],
-                       description="Model architecture"),
+                       description="Model architecture"),          # choice
     "img_size":    fargv.FargvTuple((int, int), default=(640, 640),
-                       description="Input resolution (width height)"),
-    "epochs":      fargv.FargvInt(100,
-                       description="Total training epochs"),
-    "lr0":         fargv.FargvFloat(0.01,
-                       description="Initial learning rate"),
-    "augment":     fargv.FargvBool(True,
-                       description="Enable mosaic / colour-jitter augmentation"),
+                       description="Input resolution WxH"),        # fixed tuple
     "log":         fargv.FargvStream(sys.stderr,
                        description="Log destination (file path, stderr, or stdout)"),
     "weights":     fargv.FargvStr(fargv.REQUIRED,
-                       description="Path to pretrained weights (mandatory)"),
+                       description="Pretrained weights path (mandatory)"),
     "verbosity":   fargv.FargvInt(0, short_name="v", is_count_switch=True,
                        description="Verbosity level (-vvv = 3)"),
-    "checkpoints": fargv.FargvPositional(default=[],
-                       description="Checkpoint files to evaluate"),
+    "checkpoints": fargv.FargvVariadic(default=[],
+                       description="Extra checkpoint files to evaluate"),  # variadic
+    "cmd": {                                                               # subcommand
+        "train": {"lr": 0.01, "epochs": 100, "amp": False},
+        "eval":  {"split": "val", "half": False},
+    },
 })
-print(f"Detecting with {p.arch} at {p.img_size}  weights={p.weights}")
+print(f"arch={p.arch}  img_size={p.img_size}  out={p.output_dir}")
 ```
 
 ```bash
-python detect.py --weights=yolov8n.pt --epochs=50 --img_size="(1280, 1280)"
-python detect.py --weights=yolov8l.pt --log=train.log --augment false -vv
-python detect.py --weights=yolov8l.pt a.pt b.pt c.pt   # positional checkpoints
+python detect.py --weights=yolov8n.pt train --epochs=50 --amp
+python detect.py --weights=yolov8l.pt --img_size=1280,1280 -vv eval --split=test
+python detect.py --weights=yolov8l.pt a.pt b.pt c.pt   # variadic checkpoints
 ```
 
 ```python
@@ -271,9 +280,39 @@ using `inspect` and `typing.get_type_hints`, inferring one parameter per
 argument.
 
 ```python
+from typing import Tuple
 import fargv
 
+# ── Image processing pipeline ────────────────────────────────────────────────
+def process(
+    data_dir:   str,                                 # mandatory string param (no default)
+    output_dir: str   = "/tmp/out",                  # string param with {key} interpolation
+    codec             = ("h264", "h265", "vp9"),     # choice: unannotated tuple → FargvChoice
+    img_size:   Tuple[int, int] = (1920, 1080),      # FargvTuple via Tuple annotation
+    inputs:     list  = [],                          # FargvVariadic via list annotation
+    cmd               = {                            # FargvSubcommand: unannotated dict default
+        "encode": {"bitrate": 4000, "crf": 23},
+        "decode": {"format": "yuv420"},
+    },
+) -> None:
+    """Process video files with configurable codec and filter pipeline."""
+    print(f"codec={codec}  size={img_size}  dest={output_dir}")
+
+p, _ = fargv.parse(process, non_defaults_are_mandatory=True)
+process(**vars(p))
+```
+
+```bash
+python proc.py --data_dir=/media encode --bitrate=8000
+python proc.py --data_dir=/media --codec=h265 --img_size=3840,2160 decode
+python proc.py --data_dir=/media a.mp4 b.mp4   # variadic inputs
+```
+
+
+```python
 # ── NLP: tokeniser benchmark ─────────────────────────────────────────────────
+import fargv
+
 def tokenise(
     corpus_path: str,
     tokeniser:   str  = "wordpiece",
@@ -284,33 +323,8 @@ def tokenise(
     """Tokenise *corpus_path* and save the resulting vocabulary."""
     print(f"tokenising {corpus_path!r}  vocab={vocab_size}  lower={lower_case}")
 
-p, _ = fargv.parse(tokenise)
+p, _ = fargv.parse(tokenise, non_defaults_are_mandatory=True)
 tokenise(**vars(p))
-```
-
-```bash
-python tok.py --corpus_path=/data/wiki.txt --vocab_size=50000
-python tok.py --corpus_path=/data/cc.txt --tokeniser=bpe --lower_case false
-```
-
-```python
-# ── Data Analytics: pandas pipeline ─────────────────────────────────────────
-import pandas as pd
-
-def aggregate(
-    input_csv:  str,
-    group_by:   str  = "region",
-    metric:     str  = "revenue",
-    output_csv: str  = "aggregated.csv",
-    dropna:     bool = True,
-) -> None:
-    df = pd.read_csv(input_csv)
-    if dropna:
-        df = df.dropna(subset=[metric])
-    df.groupby(group_by)[metric].sum().reset_index().to_csv(output_csv, index=False)
-
-p, _ = fargv.parse(aggregate, non_defaults_are_mandatory=True)
-aggregate(**vars(p))
 ```
 
 ```python
@@ -339,7 +353,7 @@ def clear(x: int, device: str = "cpu"): ...
 
 # ✗ Rich fargv types cannot be expressed as function defaults — they appear as
 #   their plain Python value on the CLI (no description, no special behaviour)
-def model(paths=fargv.FargvPositional([])):  # fargv sees a FargvPositional object,
+def model(paths=fargv.FargvVariadic([])):  # fargv sees a FargvVariadic object,
     ...                                       # not recognised; treated as FargvStr
 ```
 
@@ -362,7 +376,6 @@ def model(paths=fargv.FargvPositional([])):  # fargv sees a FargvPositional obje
 | Works on any callable (stdlib, third-party) | `*args`/`**kwargs` need `fn_def_tolerate_wildcards=True` |
 | Docstring appears in `--help` | `None` defaults without annotations are silently skipped |
 | Natural fit for `python -m fargv` | Rich `Fargv*` types not usable as function defaults |
-| | No `{key}` interpolation |
 
 **How do I…**
 
@@ -413,29 +426,50 @@ and the default value.
 
 ```python
 from dataclasses import dataclass, field
+from typing import Tuple
 import fargv
 
+# ── Image processing pipeline ────────────────────────────────────────────────
+@dataclass
+class ProcessConfig:
+    data_dir:   str   = "/data/raw"
+    output_dir: str   = "{data_dir}/processed"    # {key} string reference — resolved after parsing
+    codec:      tuple = ("h264", "h265", "vp9")   # choice: tuple annotation → FargvChoice
+    img_size:   Tuple[int, int] = (1920, 1080)    # FargvTuple via Tuple[int,int] annotation
+    inputs:     list  = field(default_factory=list)  # variadic: list annotation → FargvVariadic
+    cmd:        dict  = field(default_factory=lambda: {  # subcommand: dict of dicts
+        "encode": {"bitrate": 4000, "crf": 23},
+        "decode": {"format": "yuv420"},
+    })
+
+cfg, _ = fargv.parse(ProcessConfig)
+# cfg is ProcessConfig — IDE autocompletes cfg.codec, cfg.img_size, etc.
+print(f"codec={cfg.codec}  size={cfg.img_size}")
+```
+
+```bash
+python proc.py --codec=h265 --img_size=3840,2160 encode --crf=18
+python proc.py decode --format=rgb24
+python proc.py a.mp4 b.mp4   # variadic inputs
+```
+
+
+```python
 # ── Machine Learning: distributed training ───────────────────────────────────
 @dataclass
 class TrainConfig:
     data_root:    str   = "/datasets/imagenet"
-    num_workers:  int   = 8
     arch:         str   = "resnet50"
-    pretrained:   bool  = True
     epochs:       int   = 90
     lr:           float = 0.1
-    weight_decay: float = 1e-4
     amp:          bool  = False
-    gpus:         int   = 1
-    output_dir:   str   = "./runs"
 
 cfg, _ = fargv.parse(TrainConfig)
-# cfg is TrainConfig — IDE autocompletes cfg.lr, cfg.arch, etc.
-print(f"Training {cfg.arch} for {cfg.epochs} epochs on {cfg.gpus} GPU(s)")
+print(f"Training {cfg.arch} for {cfg.epochs} epochs  lr={cfg.lr}")
 ```
 
 ```bash
-python train.py --arch=vit_b16 --epochs=30 --amp --gpus=4
+python train.py --arch=vit_b16 --epochs=30 --amp
 ```
 
 ```python
@@ -453,7 +487,7 @@ cfg, _ = fargv.parse(InferConfig, non_defaults_are_mandatory=True)
 ### 4b  `Fargv*` parameter instances as defaults
 
 When you need a rich type that has no plain Python literal equivalent
-(`FargvPositional`, `FargvStream`, `FargvInt(is_count_switch=True)`, …),
+(`FargvVariadic`, `FargvStream`, `FargvTuple`, `FargvInt(is_count_switch=True)`, …),
 assign a `Fargv*` instance as the field default.  fargv detects it and uses
 it directly, ignoring the annotation (which exists only to satisfy the type
 checker and `@dataclass`).
@@ -471,7 +505,7 @@ class CheckpointConfig:
     dry_run:     bool  = False
 
     # Rich types — FargvParameter instance IS the parameter definition
-    checkpoints: list  = fargv.FargvPositional(default=[],
+    checkpoints: list  = fargv.FargvVariadic(default=[],
                              description="Checkpoint .pt files to inspect")
     verbosity:   int   = fargv.FargvInt(0, short_name="v", is_count_switch=True,
                              description="Verbosity level (-vvv = 3)")
@@ -545,23 +579,23 @@ class MixedConfig:
 #   so fargv never sees this field
 @dataclass
 class Bad:
-    paths = fargv.FargvPositional(default=[])  # NOT a dataclass field; ignored
+    paths = fargv.FargvVariadic(default=[])  # NOT a dataclass field; ignored
 
 # ✓ Add a type annotation
 @dataclass
 class Good:
-    paths: list = fargv.FargvPositional(default=[])
+    paths: list = fargv.FargvVariadic(default=[])
 
 # ✗ Trailing comma — makes the value a one-element tuple, not a FargvParameter
 @dataclass
 class Bad2:
-    paths: list = fargv.FargvPositional(default=[]),   # <- comma!
-    # paths is now (FargvPositional(...),) — fargv sees a tuple, infers FargvChoice
+    paths: list = fargv.FargvVariadic(default=[]),   # <- comma!
+    # paths is now (FargvVariadic(...),) — fargv sees a tuple, infers FargvChoice
 
 # ✓ No trailing comma
 @dataclass
 class Good2:
-    paths: list = fargv.FargvPositional(default=[])
+    paths: list = fargv.FargvVariadic(default=[])
 
 # ✗ FargvStream default must be a sys object, not a string keyword
 @dataclass
@@ -591,14 +625,13 @@ p, _ = fargv.parse(TrainConfig)
 **When to avoid**
 
 - For throwaway scripts (a plain dict is faster to write)
-- When `{key}` string interpolation between parameters is essential
 
 | | |
 |---|---|
 | ✅ Pros | ❌ Cons |
 | Full IDE autocompletion on result | More boilerplate than a plain dict for tiny scripts |
 | `isinstance(cfg, MyConfig)` works | Type annotations required on every field |
-| Reusable typed config across modules | No `{key}` interpolation across fields |
+| Reusable typed config across modules | |
 | Rich types via `Fargv*` instance defaults | `Fargv*` defaults share one object per class |
 | Mandatory fields: just omit the default | |
 | Works with `dataclasses.asdict`, `json.dumps` | |
@@ -623,18 +656,20 @@ class Config:
     "Initial learning rate."   # shown in --help
 ```
 
-*Add a rich type (stream, count-switch, positional)?*
+*Add a rich type (stream, count-switch, variadic)?*
 
 ```python
 import sys
 from dataclasses import dataclass
+from typing import Tuple
 import fargv
 
 @dataclass
 class Config:
-    verbose: int   = fargv.FargvInt(0, short_name="v", is_count_switch=True)
-    log:     object = fargv.FargvStream(sys.stderr)
-    files:   list  = fargv.FargvPositional(default=[])
+    verbose:  int          = fargv.FargvInt(0, short_name="v", is_count_switch=True)
+    log:      object       = fargv.FargvStream(sys.stderr)
+    files:    list         = fargv.FargvVariadic(default=[])
+    img_size: Tuple[int, int] = (640, 640)   # plain default, Tuple annotation → FargvTuple
 ```
 
 *Use subcommands in a dataclass?*
@@ -665,7 +700,7 @@ cfg, _ = fargv.parse(Config, subcommand_return_type="nested")
 | Rich types (stream, path, tuple, count-switch) | ❌ | ✅ | ❌ | ✅ (4b) |
 | Mandatory params | ❌ | ✅ | ✅ | ✅ |
 | Reusable typed config object | ❌ | ❌ | ❌ | ✅ |
-| `{key}` interpolation | ✅ | ✅ | ❌ | ❌ |
+| `{key}` interpolation | ✅ | ✅ | ✅ | ✅ |
 | Works with existing callables | ❌ | ❌ | ✅ | ❌ |
 
 † the function itself is the definition; no wrapper needed.

@@ -28,7 +28,7 @@ try:
 except ImportError:  # pragma: no cover
     available = False
 
-from .parameters import FargvBool, FargvChoice, FargvPositional
+from .parameters import FargvBool, FargvChoice, FargvVariadic
 from .parse import _AUTO_PARAMS
 
 
@@ -170,9 +170,9 @@ def _make_var(param):
         choices = list(param._choices)
         cur = param.value
         return ("choice", tk.StringVar(value=str(cur) if cur is not None else choices[0]))
-    if isinstance(param, FargvPositional):
+    if isinstance(param, FargvVariadic):
         cur = param.value
-        return ("positional", tk.StringVar(
+        return ("variadic", tk.StringVar(
             value=" ".join(str(x) for x in (cur or []))))
     # int, float, str, path, tuple, ...
     return ("text", tk.StringVar(value=_default_display(param)))
@@ -185,7 +185,7 @@ def _make_widget(parent, kind, var, param):
     if kind == "choice":
         return ttk.Combobox(parent, textvariable=var,
                             values=list(param._choices), state="readonly")
-    if kind == "positional":
+    if kind == "variadic":
         return ttk.Entry(parent, textvariable=var)
     # text
     w = ttk.Entry(parent, textvariable=var)
@@ -407,7 +407,7 @@ def show(parser, title="fargv"):
             try:
                 if kind == "bool":
                     parser._name2parameters[pname].evaluate(bool(var.get()))
-                elif kind == "positional":
+                elif kind == "variadic":
                     parser._name2parameters[pname].evaluate(
                         raw.split() if raw.strip() else [])
                 else:
@@ -424,7 +424,7 @@ def show(parser, title="fargv"):
                 try:
                     if kind == "bool":
                         sp._name2parameters[pname].evaluate(bool(var.get()))
-                    elif kind == "positional":
+                    elif kind == "variadic":
                         sp._name2parameters[pname].evaluate(
                             raw.split() if raw.strip() else [])
                     else:

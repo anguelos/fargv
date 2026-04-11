@@ -71,28 +71,53 @@ pip install fargv ipywidgets
 jupyter lab examples/jupyter/fargv_jupyter_demo.ipynb
 ```
 
-## Scenario
+## `scenario/` — demo GIF production
 
-Simple word count script and how to extend it with fargv.
-This is the code employed to record a GIF demonstrating employment to total novices.
+`examples/scenario/` contains the scripts used to record the animated demo
+(`docs/_static/demo.gif`) that appears at the top of the README.  The scenario
+walks a total newcomer through adding fargv to a plain Python script in six
+scenes:
 
-Requirements (other than standard python/unix tools):
-**  pandas: The demo funtion using pandas
-**  asciinema: To record the screen cast.
-**  bat: To render a source file with highlighting.
-**  git-delta: To color print a diff
-**  agg : To make a GIF from the screen cat.
+1. Display `word_count.py` — a minimal word-frequency script with no CLI.
+2. Run `word_count.py` with its hard-coded defaults.
+3. Show the diff between `word_count.py` and `word_count_fargv.py` (the
+   fargv-enabled version) using `delta`.
+4. Run `python word_count_fargv.py -h` to show the auto-generated help.
+5. Run `word_count_fargv.py` with defaults.
+6. Run `word_count_fargv.py -v` to show verbosity in action.
 
-###  Install requirements in ubuntu
+### Files
+
+| File | Purpose |
+|---|---|
+| `word_count.py` | Original script — hard-coded path and min-length |
+| `word_count_fargv.py` | Same script after adding `fargv.parse({…})` |
+| `example.txt` | Sample text file used by both scripts |
+| `scenario.sh` | Shell script that drives all scenes with typed-out commands |
+| `agg` | Pre-downloaded `agg` binary (asciinema → GIF converter) |
+
+### Requirements
+
 ```bash
 pip install asciinema pandas
-sudo apt-get install wget bat git-delta
-wget https://github.com/asciinema/agg/releases/latest/download/agg-x86_64-unknown-linux-gnu -O agg
-chmod 755 agg
+sudo apt-get install bat git-delta
 ```
 
-### Make CLI demo.gif
+`agg` is included as a pre-built binary in the `scenario/` directory.  To
+download a fresh copy:
+
 ```bash
+wget https://github.com/asciinema/agg/releases/latest/download/agg-x86_64-unknown-linux-gnu -O examples/scenario/agg
+chmod 755 examples/scenario/agg
+```
+
+### Recording the GIF
+
+Run from the `examples/scenario/` directory:
+
+```bash
+cd examples/scenario/
 asciinema rec /tmp/demo.cast --overwrite --command="bash ./scenario.sh"
 ./agg /tmp/demo.cast /tmp/demo.gif
+cp /tmp/demo.gif ../../docs/_static/demo.gif
 ```

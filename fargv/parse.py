@@ -31,7 +31,7 @@ from .parameters import (
 from .parser import ArgumentParser
 from .type_detection import definition_to_parser
 from .ansi import gray, bold_white, is_colored
-from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path
+from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path, supported_dump_formats
 
 
 _DC = TypeVar("_DC")   # used in @overload signatures for dataclass definitions
@@ -275,7 +275,7 @@ def parse(
     definition: Union[Dict[str, Any], ArgumentParser, Callable],
     given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
     argv_parse_mode: Literal["legacy", "unix"] = "unix",
-    allow_implied_positionals: bool = True,
+    allow_implied_variadics: bool = True,
     tolerate_unassigned_arguments: bool = False,
     ui: Optional[Literal["cli", "tk", "qt", "jupyter"]] = None,
     auto_define_help: bool = True,
@@ -311,11 +311,11 @@ def parse(
         "legacy" — single-dash ``-name=value``.
         Ignored when definition is an ArgumentParser.
 
-    allow_implied_positionals:
-        Route leftover tokens to the single defined positional.
+    allow_implied_variadics:
+        Route leftover tokens to the single defined variadic.
 
     tolerate_unassigned_arguments:
-        Silently discard leftovers with no positional to receive them.
+        Silently discard leftovers with no variadic to receive them.
 
     auto_define_config:
         Inject ``--config <path>`` parameter.
@@ -373,7 +373,7 @@ def parse(
     _add_auto_params(parser, auto_define_help, auto_define_bash_autocomplete,
                      auto_define_verbosity, auto_define_config,
                      auto_define_user_interface)
-    parser.allow_default_positional = allow_implied_positionals
+    parser.allow_default_variadic = allow_implied_variadics
 
     # 4. Infer short names, then pre-build help string
     parser.infer_short_names()
@@ -392,6 +392,7 @@ def parse(
         for pname, param in parser._name2parameters.items():
             if param._mandatory and not param.has_value:
                 raise FargvError(f"Required parameter {pname!r} was not provided")
+        parser._finalize_string_params()
         raw = {n: p.value for n, p in parser._name2parameters.items()}
         raw, _ = _reshape_subcommands(raw, subcommand_return_type, return_type)
         result_raw = {k: v for k, v in raw.items() if k not in parser._name2parameters or not parser._name2parameters[k].filter_out}
@@ -413,16 +414,39 @@ def parse(
         if _source == "config" and "config" in parser._name2parameters:
             raw_config_path = scan_config_path(argv[1:] if argv else [], long_prefix)
             if raw_config_path is None:
+                # Also scan for the short-name form (e.g. -C //ini)
+                _cfg_param = parser._name2parameters.get("config")
+                _short = getattr(_cfg_param, "short_name", None) if _cfg_param else None
+                if _short:
+                    raw_config_path = scan_config_path(argv[1:] if argv else [], "-", key=_short)
+            if raw_config_path is None:
                 raw_config_path = parser._name2parameters.get("config", None)
                 raw_config_path = raw_config_path._value if raw_config_path else None
-            if raw_config_path:
-                pass  # auto-creating config files is disabled — use --config=//json to create one explicitly
+            if raw_config_path and str(raw_config_path).startswith("//"):
+                # //json, //ini, //toml, //yaml → dump defaults to stdout and exit
+                _fmt = str(raw_config_path)[2:].lower() or "json"
+                _avail = supported_dump_formats()
+                if _fmt not in _avail:
+                    print(
+                        f"fargv: unsupported config format {_fmt!r}. "
+                        f"Available: {_avail}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                _progname_arg = argv[0] if argv else getattr(parser, 'name', 'fargv')
+                print(dump_config(parser, fmt=_fmt, exclude=_AUTO_PARAMS, progname=_progname_arg))
+                _fmt_ext = {"json": ".json", "ini": ".ini", "toml": ".toml", "yaml": ".yaml"}.get(_fmt, f".{_fmt}")
+                _default_path = default_config_path(_progname_arg).with_suffix(_fmt_ext)
+                print(
+                    f"fargv: to persist, redirect to: {_default_path}",
+                    file=sys.stderr,
+                )
+                sys.exit(0)
             try:
                 cfg = load_config(raw_config_path)
                 apply_config(user_params, cfg, raw_config_path)
-            except ValueError as _cfg_err:
-                import sys as _sys
-                print(f"fargv: ignoring config '{raw_config_path}': {_cfg_err}", file=_sys.stderr)
+            except (ValueError, ImportError) as _cfg_err:
+                print(f"fargv: ignoring config '{raw_config_path}': {_cfg_err}", file=sys.stderr)
         elif _source == "envvar":
             _progname = argv[0] if argv else getattr(parser, 'name', 'fargv')
             apply_env_vars(user_params, _progname)
@@ -431,6 +455,7 @@ def parse(
     # Parsing first means any CLI-supplied values pre-populate the GUI form.
     raw = parser.parse(argv, first_is_name=True,
                        tolerate_unassigned_arguments=tolerate_unassigned_arguments)
+    parser._finalize_string_params()
 
     effective_ui = raw.get("user_interface", resolved_ui)
     if effective_ui == "cli" and resolved_ui in ("tk", "qt", "jupyter"):  # pragma: no cover
@@ -488,7 +513,7 @@ def parse_and_launch(
     fn: Callable,
     given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
     argv_parse_mode: Literal["legacy", "unix"] = "unix",
-    allow_implied_positionals: bool = True,
+    allow_implied_variadics: bool = True,
     tolerate_unassigned_arguments: bool = False,
     ui: Optional[Literal["cli", "tk", "qt", "jupyter"]] = None,
     auto_define_help: bool = True,
@@ -516,7 +541,7 @@ def parse_and_launch(
         fn,
         given_parameters=given_parameters,
         argv_parse_mode=argv_parse_mode,
-        allow_implied_positionals=allow_implied_positionals,
+        allow_implied_variadics=allow_implied_variadics,
         tolerate_unassigned_arguments=tolerate_unassigned_arguments,
         ui=ui,
         auto_define_help=auto_define_help,
@@ -538,7 +563,7 @@ def parse_and_launch(
 def parse_here(
     given_parameters: Optional[Union[Dict[str, Any], List[str]]] = None,
     argv_parse_mode: Literal["legacy", "unix"] = "unix",
-    allow_implied_positionals: bool = True,
+    allow_implied_variadics: bool = True,
     tolerate_unassigned_arguments: bool = False,
     ui: Optional[Literal["cli", "tk", "qt", "jupyter"]] = None,
     auto_define_help: bool = True,
@@ -588,7 +613,7 @@ def parse_here(
         fn,
         given_parameters=given_parameters,
         argv_parse_mode=argv_parse_mode,
-        allow_implied_positionals=allow_implied_positionals,
+        allow_implied_variadics=allow_implied_variadics,
         tolerate_unassigned_arguments=tolerate_unassigned_arguments,
         ui=ui,
         auto_define_help=auto_define_help,

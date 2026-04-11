@@ -2,7 +2,7 @@ import sys
 import pytest
 from fargv.parameters import (
     FargvError, FargvInt, FargvFloat, FargvBool,
-    FargvStr, FargvChoice, FargvPositional,
+    FargvStr, FargvChoice, FargvVariadic,
 )
 from fargv.parser import ArgumentParser
 
@@ -204,27 +204,27 @@ class TestFargvChoice:
 
 
 # ---------------------------------------------------------------------------
-# FargvPositional
+# FargvVariadic
 # ---------------------------------------------------------------------------
 
-class TestFargvPositional:
+class TestFargvVariadic:
     def test_default_empty(self):
-        p = FargvPositional(name="files")
+        p = FargvVariadic(name="files")
         assert p.value == []
 
     def test_ingest_multiple(self):
-        p = FargvPositional(name="files")
+        p = FargvVariadic(name="files")
         leftover = p.ingest_value_strings("a.txt", "b.txt", "c.txt")
         assert p.value == ["a.txt", "b.txt", "c.txt"]
         assert leftover == []
 
-    def test_is_positional(self):
-        p = FargvPositional(name="files")
-        assert p.is_positional is True
+    def test_is_variadic(self):
+        p = FargvVariadic(name="files")
+        assert p.is_variadic is True
 
     def test_via_parser_trailing(self):
         result = parse(
-            [FargvInt(0, name="count"), FargvPositional(name="files")],
+            [FargvInt(0, name="count"), FargvVariadic(name="files")],
             ["--count=2", "a.txt", "b.txt"],
         )
         assert result["count"] == 2
@@ -232,7 +232,7 @@ class TestFargvPositional:
 
     def test_via_parser_leading(self):
         result = parse(
-            [FargvPositional(name="files"), FargvInt(0, name="count")],
+            [FargvVariadic(name="files"), FargvInt(0, name="count")],
             ["a.txt", "b.txt", "--count=2"],
         )
         assert result["files"] == ["a.txt", "b.txt"]
@@ -276,10 +276,10 @@ class TestArgumentParser:
         result = p.parse(["prog", "-n=7"])
         assert result["num"] == 7
 
-    def test_no_positional_raises(self):
+    def test_no_variadic_raises(self):
         p = ArgumentParser()
         p._add_parameter(FargvInt(0, name="x"))
-        with pytest.raises(FargvError, match="positional"):
+        with pytest.raises(FargvError, match="unmatched"):
             p.parse(["prog", "stray"])
 
     def test_generate_help(self):

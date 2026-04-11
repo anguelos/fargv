@@ -8,7 +8,9 @@
       "Bash(make htmldoc:*)",
       "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/test/unittest/*.py)",
       "Bash(wc -l /home/anguelos_ro/workspace/src/fargv/fargv/*.py /home/anguelos_ro/workspace/src/fargv/fargv/parameters/*.py)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(python3 -c ':*)",
+      "Read(//tmp/**)"
     ]
   }
 }

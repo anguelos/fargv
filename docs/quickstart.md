@@ -41,7 +41,7 @@ p, _ = fargv.parse({
     "count":   1,
     "verbose": False,
     "mode":    ("fast", "slow", "medium"),   # choice; first element is default
-    "files":   [],                           # positional list (extra CLI tokens)
+    "files":   [],                           # variadic list (extra CLI tokens)
 })
 print(f"Hello, {p.name}! count={p.count}")
 ```

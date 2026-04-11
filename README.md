@@ -20,9 +20,13 @@ aliases, reads a config file (JSON, YAML, TOML, or INI), applies environment
 variable overrides, and optionally opens a GUI — all without any additional
 configuration.
 
-![fargv data-flow: definition → config → env vars → CLI / GUI / Jupyter](docs/_static/fargv_flow.svg)
+<p align="center">
+  <img src="docs/_static/fargv_flow.svg" alt="fargv data-flow: definition → config → env vars → CLI / GUI / Jupyter"/>
+</p>
 
-<a href="docs/_static/demo.gif"><img src="docs/_static/demo.gif" width="400" alt="fargv demo"/></a>
+<p align="center">
+  <a href="docs/_static/demo.gif"><img src="docs/_static/demo.gif" width="400" alt="fargv demo"/></a>
+</p>
 
 ## Features
 
@@ -78,7 +82,7 @@ p, _ = fargv.parse({
     "output_dir": "{data_dir}/results",      # str — resolved via {data_dir}
     "mode":       ("train", "eval", "test"), # choice — first element is default
     "verbose":    False,                     # bool switch
-    "files":      [],                        # positional — collects leftover args
+    "files":      [],                        # variadic — collects leftover args
 })
 
 print(f"Reading from {p.data_dir}, writing to {p.output_dir}")
@@ -121,7 +125,9 @@ python -m fargv numpy.linspace --help
 python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false
 ```
 
-![fargv bash demo](docs/_static/fargv_bash.png)
+<p align="center">
+  <img src="docs/_static/fargv_bash.png" alt="fargv bash demo"/>
+</p>
 
 Pass `--user_interface tk` (or `qt`) to open a GUI instead:
 
@@ -129,7 +135,9 @@ Pass `--user_interface tk` (or `qt`) to open a GUI instead:
 python -m fargv numpy.linspace -s 0 -S 6.283 --num 8 --endpoint false --user_interface tk
 ```
 
-![fargv Tk GUI demo](docs/_static/fargv_linspace_tk.png)
+<p align="center">
+  <img src="docs/_static/fargv_linspace_tk.png" alt="fargv Tk GUI demo"/>
+</p>
 
 ## Comparison with other argument parsers
 
@@ -184,7 +192,7 @@ p, _ = fargv.fargv({
     "count":   1,                  # int
     "verbose": False,              # bool flag
     "mode":    ("fast", "slow"),   # choice, first is default
-    "files":   set(),              # positional list
+    "files":   set(),              # variadic list
 })
 
 print(f"Hello, {p.name}! count={p.count}")

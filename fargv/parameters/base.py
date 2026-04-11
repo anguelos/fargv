@@ -107,10 +107,10 @@ class FargvParameter(ABC):
     # ── Classification properties ──────────────────────────────────────────
 
     @property
-    def is_positional(self) -> bool:
-        """``True`` for parameters that consume trailing positional tokens.
+    def is_variadic(self) -> bool:
+        """``True`` for parameters that collect unmatched argv tokens.
 
-        Overridden to ``True`` by :class:`~fargv.parameters.collection.FargvPositional`.
+        Overridden to ``True`` by :class:`~fargv.parameters.collection.FargvVariadic`.
         """
         return False
 
@@ -283,7 +283,7 @@ class FargvParameter(ABC):
 
         Consumes exactly one token.  Remaining tokens are returned as a list
         of leftovers that the parser may pass to subsequent parameters (e.g.
-        a :class:`~fargv.parameters.collection.FargvPositional`).
+        a :class:`~fargv.parameters.collection.FargvVariadic`).
 
         :param values: Raw string tokens from the parsed argv.
         :return: Unconsumed tokens (all of *values* except the first).

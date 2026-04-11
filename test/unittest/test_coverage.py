@@ -13,7 +13,7 @@ import pytest
 # ── import everything we're about to exercise ──────────────────────────────
 from fargv.parameters.base import REQUIRED, FargvParameter
 from fargv.parameters.scalars import FargvBool, FargvBoolHelp, FargvInt, FargvFloat
-from fargv.parameters.collection import FargvChoice, FargvPositional
+from fargv.parameters.collection import FargvChoice, FargvVariadic
 from fargv.parameters.stream import FargvStream, FargvInputStream, FargvOutputStream
 from fargv.parameters.string import FargvStr
 from fargv.parameters import FargvError, FargvTuple, FargvSubcommand
@@ -216,27 +216,27 @@ class TestFargvChoiceEvaluate:
 
 
 # ===========================================================================
-# collection.py — FargvPositional.evaluate
+# collection.py — FargvVariadic.evaluate
 # ===========================================================================
 
-class TestFargvPositionalEvaluate:
+class TestFargvVariadicEvaluate:
     def test_evaluate_list(self):
-        p = FargvPositional(name="f")
+        p = FargvVariadic(name="f")
         p.evaluate(["x", "y"])
         assert p.value == ["x", "y"]
 
     def test_evaluate_tuple(self):
-        p = FargvPositional(name="f")
+        p = FargvVariadic(name="f")
         p.evaluate(("a", "b"))
         assert p.value == ["a", "b"]
 
     def test_evaluate_set(self):
-        p = FargvPositional(name="f")
+        p = FargvVariadic(name="f")
         p.evaluate({"x"})
         assert p.value == ["x"]
 
     def test_evaluate_scalar(self):
-        p = FargvPositional(name="f")
+        p = FargvVariadic(name="f")
         p.evaluate("single")
         assert p.value == ["single"]
 

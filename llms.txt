@@ -50,7 +50,7 @@ p, _ = fargv.parse({
     "mode":    ("fast", "slow", "medium"),     # choice; first = default
     "base":    "/tmp",
     "out":     "{base}/results",              # {key} resolved from sibling str params
-    "files":   [],                             # positional list (unmatched tokens)
+    "files":   [],                             # variadic list (unmatched tokens)
 })
 # python script.py --name=Alice --count=3 --verbose --mode=slow a.txt b.txt
 ```
@@ -80,7 +80,7 @@ p, _ = fargv.parse({
     "img_size": fargv.FargvTuple((int, int), default=(640, 640)),
     "log":      fargv.FargvStream(sys.stderr),
     "verbose":  fargv.FargvInt(0, short_name="v", is_count_switch=True),
-    "ckpts":    fargv.FargvPositional(default=[], description="Extra checkpoints"),
+    "ckpts":    fargv.FargvVariadic(default=[], description="Extra checkpoints"),
     "dry_run":  False,                          # plain literal still works
 })
 # python train.py --weights=model.pt --lr=1e-4 -vv a.pt b.pt
@@ -110,7 +110,7 @@ class Config:
     # Rich types: assign Fargv* instance as default
     verbose:    int   = fargv.FargvInt(0, short_name="v", is_count_switch=True)
     log:        object = fargv.FargvStream(sys.stderr)
-    files:      list  = fargv.FargvPositional(default=[])
+    files:      list  = fargv.FargvVariadic(default=[])
 
 cfg, _ = fargv.parse(Config)
 # cfg is Config -- IDE autocompletes cfg.lr, cfg.arch
@@ -137,7 +137,7 @@ class Cfg:
 ```
 
 **When**: typed result, IDE autocompletion, mypy/pyright, config reused across modules.
-**Limit**: no `{key}` interpolation across fields; type annotations required.
+**Limit**: type annotations required for accurate coercion.
 
 ---
 
@@ -208,7 +208,7 @@ p, help_str = fargv.fargv({
     "count":   1,
     "verbose": False,
     "mode":    ("fast", "slow", "medium"),
-    "files":   set(),          # set() = positional in legacy
+    "files":   set(),          # set() = variadic in legacy
 })
 # python script.py -name=Alice -count=3 -verbose -mode=slow a.txt
 ```
@@ -235,8 +235,8 @@ Full reference: https://fargv.readthedocs.io/en/latest/api_legacy.html
 | `"hi"` / `str` | FargvStr | `--name=Alice` |
 | `("a","b","c")` >=3 items | FargvChoice | `--mode=b` |
 | `(default, "desc")` 2-item | FargvX with description | — |
-| `[]` / `list` | FargvPositional | trailing tokens |
-| `set()` | FargvPositional | same (legacy compat) |
+| `[]` / `list` | FargvVariadic | trailing tokens |
+| `set()` | FargvVariadic | same (legacy compat) |
 | `Tuple[T,...]` annotation | FargvTuple | `--size=(640,480)` |
 | `Optional[Tuple[T,...]]` | FargvTuple(optional=True) | `--size=()` -> None |
 
@@ -253,7 +253,7 @@ All exported from `fargv` top-level.
 | `FargvFloat(default)` | short_name, description | |
 | `FargvStr(default)` | short_name, description | `{key}` interpolation from siblings |
 | `FargvChoice(choices)` | default (first if omitted), description | choices = list |
-| `FargvPositional(default=[])` | description | collects unmatched CLI tokens |
+| `FargvVariadic(default=[])` | description | collects unmatched CLI tokens |
 | `FargvInputStream(default=stdin)` | description | CLI: path or "stdin" |
 | `FargvOutputStream(default=stdout)` | description | CLI: path, "stdout", or "stderr" |
 | `FargvStream(default)` | description | pass sys.stdin/out/err |
@@ -274,7 +274,7 @@ def parse(
     definition,                         # dict | Callable | dataclass | ArgumentParser
     given_parameters=None,              # None->sys.argv | List[str]->argv | Dict->direct
     argv_parse_mode="unix",             # "unix" (--) or "legacy" (-)
-    allow_implied_positionals=True,
+    allow_implied_variadics=True,
     tolerate_unassigned_arguments=False,
     ui=None,                            # None|"cli"|"tk"|"qt"|"jupyter"
     auto_define_help=True,
@@ -316,9 +316,11 @@ Use `"nested"` or `"tuple"` with dataclass definitions.
 
 Env-var: `APPNAME_PARAMNAME` (uppercased; APPNAME from argv[0], dots/hyphens → underscores).
 
-**Subcommand selection is CLI-only.** Config files and env vars may not select
-which subcommand to run — doing so raises `FargvError` at parse time.
-Config files may only set per-branch parameter values via the nested dict format.
+**Flat key convention for config and env vars.**
+Top-level param `lr` → config key `lr` / env var `APPNAME_LR`.
+Branch param `lr` inside subcommand branch `train` → config key `train.lr` / env var `APPNAME_TRAIN_LR`.
+The subcommand field name itself is not a valid config key or env var target.
+Config files: unknown keys trigger a stderr warning and the whole dict is ignored (default policy).
 
 ### return_type
 
@@ -337,7 +339,7 @@ Config files may only set per-branch parameter values via the nested dict format
 | `--help` | `-h` | coloured help, exit |
 | `--verbosity` | `-v` | count-switch; `-vvv`=3 |
 | `--bash_autocomplete` | — | bash completion, exit |
-| `--config` | — | load JSON/YAML/TOML/INI; default `~/.{appname}.json` |
+| `--config` | `-C` | load JSON/YAML/TOML/INI; `//json`/`//ini`/`//toml`/`//yaml` dumps config and exits |
 | `--user_interface` | — | `cli`/`tk`/`qt`; suppressed in Jupyter |
 
 ---
@@ -378,19 +380,17 @@ class Cfg:
 cfg, _ = fargv.parse(Cfg)
 assert isinstance(cfg, Cfg)
 
-# Config round-trip (flat params)
-from fargv.config import dump_config, load_config
-import pathlib
-p, _ = fargv.parse({"lr": 1e-3}, given_parameters={})
-dump_config(vars(p), pathlib.Path("run.json"))
-cfg = load_config(pathlib.Path("run.json"))   # plain dict
+# Dump config to stdout and exit (//format syntax)
+# $ python prog.py --config //json   →  prints JSON to stdout, suggests save path to stderr
+# $ python prog.py --config //ini    →  INI format with ; comments
+# $ python prog.py -C //yaml         →  YAML format (-C is short alias for --config)
 
-# Generate config covering all subcommand branches (via CLI)
-# $ python prog.py --config=   →  stdout includes ALL branches:
-# { "verbose": false, "cmd": { "train": {"lr": 0.01}, "eval": {"dataset": "val"} } }
-# Config files may SET per-branch values but may NOT select the active branch.
-# "cmd": "train"   →  FargvError (selection via config is forbidden)
-# PROG_CMD=train   →  FargvError (selection via env var is also forbidden)
+# Flat key convention: subcommand branch 'train', param 'lr'
+# Config file key:  train.lr        (dot separator)
+# Env var:          PROG_TRAIN_LR   (underscore separator, with app prefix)
+
+# Unknown keys in config: warns to stderr, ignores entire dict (default)
+# Change with: fargv.parse(..., unknown_keys="ignore_key_and_warn")
 ```
 
 ---

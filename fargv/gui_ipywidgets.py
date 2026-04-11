@@ -22,7 +22,7 @@ except ImportError:
 
 from .parameters import (
     FargvBool, FargvInt, FargvFloat, FargvStr,
-    FargvChoice, FargvPositional,
+    FargvChoice, FargvVariadic,
 )
 from .parse import _AUTO_PARAMS
 
@@ -41,7 +41,7 @@ def show(parser, title: str = "fargv") -> bool:
     * :class:`~fargv.parameters.FargvFloat`      → FloatText
     * :class:`~fargv.parameters.FargvStr`        → Text
     * :class:`~fargv.parameters.FargvChoice`     → Dropdown
-    * :class:`~fargv.parameters.FargvPositional` → Textarea (space-separated)
+    * :class:`~fargv.parameters.FargvVariadic` → Textarea (space-separated)
 
     Clicking *Apply* calls :meth:`~fargv.parameters.base.FargvParameter.evaluate`
     on each parameter with the current widget value.
@@ -101,7 +101,7 @@ def show(parser, title: str = "fargv") -> bool:
             )
             widget_map[name] = ("float", w)
 
-        elif isinstance(param, FargvPositional):
+        elif isinstance(param, FargvVariadic):
             current = " ".join(str(x) for x in (param.value or []))
             w = widgets.Textarea(
                 value=current,
@@ -109,7 +109,7 @@ def show(parser, title: str = "fargv") -> bool:
                 placeholder="space-separated values",
                 style=style, layout=widgets.Layout(width="420px", height="60px"),
             )
-            widget_map[name] = ("positional", w)
+            widget_map[name] = ("variadic", w)
 
         else:  # FargvStr
             w = widgets.Text(
@@ -143,7 +143,7 @@ def show(parser, title: str = "fargv") -> bool:
                     parser._name2parameters[name].evaluate(float(w.value))
                 elif kind == "choice":
                     parser._name2parameters[name].evaluate(w.value)
-                elif kind == "positional":
+                elif kind == "variadic":
                     tokens = w.value.split() if w.value.strip() else []
                     parser._name2parameters[name].evaluate(tokens)
                 else:

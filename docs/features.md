@@ -21,7 +21,7 @@ p, _ = fargv.parse({
     "lr":      0.001,            # → float
     "verbose": False,            # → bool flag
     "mode":    ("fast", "slow", "medium"),  # → choice (first = default)
-    "files":   [],               # → positional list
+    "files":   [],               # → variadic list
 })
 ```
 
@@ -50,7 +50,7 @@ Usage: script [OPTIONS]
 | `"hello"` | `FargvStr` | `--name=Alice` |
 | `("a","b","c")` ≥ 3 items | `FargvChoice` | `--mode=b` |
 | `(default, "desc")` 2 items | *any* + description | — |
-| `[]` | `FargvPositional` | trailing tokens |
+| `[]` | `FargvVariadic` | trailing tokens |
 | `{"sub": {...}}` | `FargvSubcommand` | `prog sub --flag` |
 
 > **Disable**: not applicable — type inference is the definition mechanism.
@@ -247,107 +247,68 @@ fargv.FargvInt(0, short_name="v", is_count_switch=True)
 
 ## Config file support
 
-fargv automatically injects a `--config` parameter. Point it at a JSON,
-YAML, TOML, or INI file; those values override coded defaults but are
+fargv automatically injects a `--config` / `-C` parameter.  Point it at a
+JSON, YAML, TOML, or INI file; those values override coded defaults but are
 themselves overridden by any CLI flags.
 
 ```text
-$ cat ~/.train.config.json
+$ cat ~/.train_py.config.json
 {"lr": 0.001, "epochs": 50}
 
-$ python train.py --config=~/.train.config.json --epochs=100
+$ python train.py --config=~/.train_py.config.json --epochs=100
 # lr=0.001 (from config), epochs=100 (CLI wins)
 ```
 
-**Generating a config file from current values**
+**Generating a config file**
 
-Pass an empty string to `--config` to print all current parameter values as
-JSON to stdout, then exit. Pipe the output to create a config file:
+Pass `//format` to dump all current parameter values in the chosen format and
+exit.  Pipe the output to create a config file:
 
 ```text
-$ python train.py --lr=0.001 --epochs=50 --config=
+$ python train.py --lr=0.001 --config //json
 {
+  "fargv_comment.lr": "Learning rate.  type: float  default: 0.01  env var: TRAIN_LR",
   "lr": 0.001,
-  "epochs": 50,
-  "model": "resnet50"
+  "epochs": 10
 }
+fargv: to persist, redirect to: /home/user/.train_py.config.json
 
-$ python train.py --lr=0.001 --epochs=50 --config= > ~/.train.config.json
+$ python train.py --lr=0.001 --config //json > ~/.train_py.config.json
 ```
 
-On the next run, those values load automatically from the saved file:
+On the next run those values load automatically from the saved file.
 
-```text
-$ python train.py
-# lr=0.001, epochs=50 (from ~/.train.config.json)
-```
+Supported formats: `//json`, `//ini`, `//toml`, `//yaml`.  The suggested save
+path uses the matching file extension.
 
-Or load a specific file explicitly:
+**Flat key convention**
 
-```text
-$ python train.py --config=~/.train.config.json --epochs=100
-# lr=0.001 (from config), epochs=100 (CLI wins)
-```
-
-**Config files with subcommands**
-
-`--config=` includes **all subcommand branches** in the dump, not just the
-selected one. Each branch appears under its name:
-
-```text
-$ python prog.py train --config=
-{
-  "verbose": false,
-  "cmd": {
-    "train": {
-      "lr": 0.01,
-      "epochs": 10
-    },
-    "eval": {
-      "dataset": "val"
-    }
-  }
-}
-
-$ python prog.py train --config= > ~/.prog.json
-```
-
-When loading the config on the next run, fargv applies each branch's values
-to the matching sub-parser, regardless of which subcommand is selected:
-
-```text
-$ python prog.py eval --config=~/.prog.json
-# eval uses dataset from config; train values are loaded but not used
-```
-
-> **Note**: subcommand param values in the dump reflect definition defaults,
-> not CLI overrides passed in the same invocation (top-level params do
-> capture CLI values). Edit the generated file to customise per-branch defaults.
-
-**Config files may not select a subcommand.** Placing a string value for a
-subcommand key raises `FargvError` at parse time:
+Config files use flat keys.  Subcommand branch parameters are prefixed with the
+branch name and a dot:
 
 ```json
-{ "cmd": "train" }
+{
+  "lr": 0.001,
+  "train.lr": 0.005,
+  "train.epochs": 50
+}
 ```
 
-```text
-FargvError: subcommand 'cmd' cannot be selected via a config file (got 'train').
-```
+The subcommand field name itself (`cmd`, etc.) is not a valid key — only branch
+names are used as prefixes.
 
-Only the CLI can select a subcommand: `python prog.py train` or `--cmd=train`.
+**JSON pseudo-comments**
 
-```python
-# Programmatic round-trip (e.g. in tests or notebooks)
-from fargv.config import dump_config
-import pathlib
+Keys starting with `fargv_comment` are silently dropped by the loader.  The
+dump functions write them automatically to annotate each parameter with its
+help text and env var name.
 
-p, _ = fargv.parse({"lr": 0.01, "epochs": 10}, given_parameters={})
-dump_config(vars(p), pathlib.Path("run.json"))
-```
+**Unknown keys**
 
-The default config path `~/.{appname}.config.json` is checked automatically
-on every run (if it exists).
+If a config file contains any unknown key, fargv warns to stderr and ignores
+the entire dict by default.  Change with the `unknown_keys` argument to
+`parse()`: `"ignore_key_and_warn"` (skip bad keys, apply rest) or `"raise"`
+(FargvError).
 
 > **Disable**: pass `auto_define_config=False` to `fargv.parse(...)`.
 
@@ -355,39 +316,29 @@ on every run (if it exists).
 
 ## Environment variable overrides
 
-Every parameter can be overridden by an environment variable named
-`APPNAME_PARAMNAME` (uppercased). The app name is derived from `argv[0]`.
+Every parameter can be overridden by an environment variable.  The naming is
+flat with an app-name prefix, using underscore as separator:
 
-```text
-$ TRAIN_LR=0.001 python train.py
-# lr=0.001 (from env), other params use coded defaults
-
-$ TRAIN_LR=0.001 python train.py --lr=1e-4
-# lr=0.0001 (CLI wins over env)
+```
+{APPNAME}_{KEY}   (all uppercase)
 ```
 
-```python
-import fargv
+For a subcommand branch parameter — e.g. `lr` inside branch `train` of
+`train.py` — the env var is `TRAIN_PY_TRAIN_LR`.
 
-p, _ = fargv.parse({"lr": 0.01, "epochs": 10})
-# Running as "train.py": reads TRAIN_LR and TRAIN_EPOCHS from environment
+```text
+$ TRAIN_PY_LR=0.001 python train.py
+# lr=0.001 (from env), other params use coded defaults
+
+$ TRAIN_PY_LR=0.001 python train.py --lr=1e-4
+# lr=0.0001 (CLI wins over env)
 ```
 
 Override order (lowest → highest priority):
 `coded default → config file → env var → CLI / GUI`
 
-**Env vars may not select a subcommand.** If an env var name matches a
-subcommand parameter, fargv raises `FargvError` at parse time:
-
-```text
-$ PROG_CMD=eval python prog.py
-FargvError: Environment variable 'PROG_CMD' attempts to select subcommand 'cmd',
-but subcommand selection is only allowed via the CLI.
-```
-
 > **Disable**: pass `override_order=["default", "config", "ui"]` to skip env vars.
 
----
 
 ## Subcommands
 
@@ -544,9 +495,9 @@ Works inside regular functions, instance methods, and class methods.
 
 ---
 
-## Positional parameters
+## Variadic parameters
 
-An empty `list` default (or `FargvPositional`) collects all unmatched CLI
+An empty `list` default (or `FargvVariadic`) collects all unmatched CLI
 tokens into an ordered list — useful for file arguments and batch inputs.
 
 ```python
@@ -554,7 +505,7 @@ import fargv
 
 p, _ = fargv.parse({
     "model":  "resnet50",
-    "images": [],           # positional — catches leftover tokens
+    "images": [],           # variadic — catches leftover tokens
 })
 ```
 
@@ -566,10 +517,10 @@ model=vit  images=['a.jpg', 'b.jpg', 'c.jpg']
 With a description:
 
 ```python
-{"checkpoints": fargv.FargvPositional(default=[], description="checkpoint files")}
+{"checkpoints": fargv.FargvVariadic(default=[], description="checkpoint files")}
 ```
 
-> Only one positional parameter per parser is supported.
+> Only one variadic parameter per parser is supported.
 
 ---
 

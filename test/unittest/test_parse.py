@@ -3,7 +3,7 @@ import sys
 import types
 import pytest
 import fargv
-from fargv.parameters import FargvError, FargvInt, FargvStr, FargvBool, FargvPositional, REQUIRED
+from fargv.parameters import FargvError, FargvInt, FargvStr, FargvBool, FargvVariadic, REQUIRED
 from fargv.parser import ArgumentParser
 
 
@@ -42,11 +42,11 @@ class TestDictDefinition:
         with pytest.raises(FargvError):
             p({"mode": ("fast", "slow", "other")}, ["--mode=medium"])
 
-    def test_positional(self):
+    def test_variadic(self):
         ns = p({"files": []}, ["a.txt", "b.txt"])
         assert ns.files == ["a.txt", "b.txt"]
 
-    def test_positional_with_default(self):
+    def test_variadic_with_default(self):
         ns = p({"files": ["default.txt"]}, [])
         assert ns.files == ["default.txt"]
 
@@ -181,10 +181,10 @@ class TestCountSwitch:
                ["--vlevel=5"])
         assert ns.vlevel == 5
 
-    def test_count_with_positional(self):
+    def test_count_with_variadic(self):
         ap = ArgumentParser()
         ap._add_parameter(FargvInt(0, name="v", short_name="v", is_count_switch=True))
-        ap._add_parameter(FargvPositional(name="files"))
+        ap._add_parameter(FargvVariadic(name="files"))
         result = ap.parse(["prog", "-vv", "a.txt", "b.txt"])
         assert result["v"] == 2
         assert result["files"] == ["a.txt", "b.txt"]
@@ -209,21 +209,21 @@ class TestAutoParamsStripped:
         assert not hasattr(ns, "bash_autocomplete")
 
 
-# ─────────────────────────────────────── positional / leftover ─────────────
+# ─────────────────────────────────────── variadic / leftover ───────────────
 
-class TestPositionals:
-    def test_allow_implied_positionals(self):
+class TestVariadics:
+    def test_allow_implied_variadics(self):
         ns = p({"n": 0, "files": []}, ["--n=1", "a.txt", "b.txt"],
-               allow_implied_positionals=True)
+               allow_implied_variadics=True)
         assert ns.files == ["a.txt", "b.txt"]
 
-    def test_no_implied_positionals_raises(self):
+    def test_no_implied_variadics_raises(self):
         with pytest.raises(FargvError, match="Unexpected"):
-            p({"n": 0}, ["stray"], allow_implied_positionals=False,
+            p({"n": 0}, ["stray"], allow_implied_variadics=False,
               tolerate_unassigned_arguments=False)
 
     def test_tolerate_unassigned(self):
-        # No positional defined but tolerate=True → no error
+        # No variadic defined but tolerate=True → no error
         ns = p({"n": 0}, ["stray"], tolerate_unassigned_arguments=True)
         assert ns.n == 0
 

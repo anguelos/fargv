@@ -20,9 +20,9 @@ Type-inference rules (for plain-dict definitions)
 +-------------------------------+---------------------------+
 | ``tuple`` (3+ elements)       | :class:`FargvChoice`      |
 +-------------------------------+---------------------------+
-| ``list``                      | :class:`FargvPositional`  |
+| ``list``                      | :class:`FargvVariadic`    |
 +-------------------------------+---------------------------+
-| ``set``                       | :class:`FargvPositional`  |
+| ``set``                       | :class:`FargvVariadic`    |
 +-------------------------------+---------------------------+
 | ``dict`` (all vals dicts)     | :class:`FargvSubcommand`  |
 +-------------------------------+---------------------------+
@@ -38,7 +38,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from .parameters import (
     FargvError, FargvParameter, REQUIRED,
     FargvInt, FargvFloat, FargvBool, FargvStr,
-    FargvChoice, FargvPositional, FargvTuple, FargvSubcommand,
+    FargvChoice, FargvVariadic, FargvPositional, FargvTuple, FargvSubcommand,
 )
 from .parser import ArgumentParser
 
@@ -80,8 +80,8 @@ def _infer_param(key: str, value: Any) -> FargvParameter:
     if isinstance(value, float):  return FargvFloat(value,  name=key, description=description)
     if isinstance(value, str):    return FargvStr(value,    name=key, description=description)
     if isinstance(value, tuple):  return FargvChoice(list(value), name=key, description=description)
-    if isinstance(value, list):   return FargvPositional(value,   name=key, description=description)
-    if isinstance(value, set):    return FargvPositional(list(value), name=key, description=description)
+    if isinstance(value, list):   return FargvVariadic(value,   name=key, description=description)
+    if isinstance(value, set):    return FargvVariadic(list(value), name=key, description=description)
     if isinstance(value, dict):
         if _looks_like_subcommand_dict(value):
             return FargvSubcommand(value, name=key, description=description)
@@ -91,6 +91,26 @@ def _infer_param(key: str, value: Any) -> FargvParameter:
         )
 
     raise FargvError(f"Cannot infer Fargv parameter type for {key!r}: {type(value)!r}")
+
+
+def _link_string_params(parser: ArgumentParser) -> None:
+    """Wire up ``{key}`` cross-interpolation for all :class:`~fargv.parameters.string.FargvStr`
+    parameters in *parser*.
+
+    Sets ``other_string_params`` on every :class:`~fargv.parameters.string.FargvStr`
+    to the **full** parameter map, so that ``{key}`` placeholders can reference any
+    parameter by name — not just string siblings.  For example, ``{epochs}`` in a
+    string default resolves to the current value of an ``int`` parameter ``epochs``.
+
+    Called automatically by :func:`dict_to_parser`, :func:`function_to_parser`, and
+    :func:`dataclass_to_parser`.
+
+    :param parser: A fully-populated :class:`~fargv.parser.ArgumentParser`.
+    """
+    all_params = dict(parser._name2parameters)
+    for param in all_params.values():
+        if isinstance(param, FargvStr):
+            param.other_string_params = all_params
 
 
 def dict_to_parser(
@@ -115,17 +135,12 @@ def dict_to_parser(
     :raises FargvError: When a value's type cannot be inferred.
     """
     parser = ArgumentParser(long_prefix=long_prefix, short_prefix=short_prefix)
-    string_params: Dict[str, FargvStr] = {}
 
     for key, value in definition.items():
         param = _infer_param(key, value)
         parser._add_parameter(param)
-        if isinstance(param, FargvStr):
-            string_params[key] = param
 
-    for param in string_params.values():
-        param.other_string_params = string_params
-
+    _link_string_params(parser)
     return parser
 
 
@@ -136,7 +151,7 @@ _ANNOTATION_MAP = {
     float: FargvFloat,
     bool:  FargvBool,
     str:   FargvStr,
-    list:  FargvPositional,
+    list:  FargvVariadic,
 }
 
 
@@ -245,6 +260,7 @@ def function_to_parser(
 
         parser._add_parameter(fargv_param)
 
+    _link_string_params(parser)
     return parser
 
 
@@ -353,6 +369,7 @@ def dataclass_to_parser(
         if doc and fargv_param._description is None:
             fargv_param._description = doc
         parser._add_parameter(fargv_param)
+    _link_string_params(parser)
     return parser
 
 

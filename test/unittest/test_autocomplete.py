@@ -1,7 +1,7 @@
 """Tests for ArgumentParser.generate_bash_autocomplete()."""
 import pytest
 from fargv.parser import ArgumentParser
-from fargv.parameters import FargvBool, FargvInt, FargvStr, FargvPositional
+from fargv.parameters import FargvBool, FargvInt, FargvStr, FargvVariadic
 from fargv.parameters.subcommand import FargvSubcommand
 from fargv.type_detection import definition_to_parser
 
@@ -67,7 +67,7 @@ class TestSimpleAutocomplete:
         p = _parser({"x": 1})
         assert p.generate_bash_autocomplete().endswith("\n")
 
-    def test_positional_param_flag_present(self):
+    def test_variadic_param_flag_present(self):
         p = _parser({"files": []})
         script = p.generate_bash_autocomplete()
         assert "--files" in script

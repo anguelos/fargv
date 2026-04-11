@@ -37,7 +37,7 @@ sys.modules["fargv.__main__"] = _main_mod
 def test_oo_fargv_shim_imports():
     from fargv.oo_fargv import (
         FargvInt, FargvFloat, FargvBool, FargvStr, FargvChoice,
-        FargvPositional, FargvTuple, FargvSubcommand, ArgumentParser,
+        FargvVariadic, FargvTuple, FargvSubcommand, ArgumentParser,
         FargvError, REQUIRED,
     )
     assert FargvInt is not None

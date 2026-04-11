@@ -16,7 +16,7 @@ Type hierarchy
 │   └── :class:`FargvUserInterface`   — selects UI mode at runtime
 ├── :class:`FargvStr`          — string with ``{key}`` interpolation
 ├── :class:`FargvChoice`       — enum-style choice from a fixed list
-├── :class:`FargvPositional`   — ordered list of positional tokens
+├── :class:`FargvVariadic`     — ordered list of unmatched tokens (0-N variadic)
 ├── :class:`FargvStream`       — text stream (file / stdin / stdout / stderr)
 │   ├── :class:`FargvInputStream`
 │   └── :class:`FargvOutputStream`
@@ -31,7 +31,7 @@ from .base import FargvError, FargvParameter, REQUIRED
 from .scalars import FargvInt, FargvFloat, FargvBool, FargvBoolHelp
 from .auto_params import FargvHelp, FargvVerbosity, FargvBashAutocomplete, FargvConfig, FargvUserInterface
 from .string import FargvStr
-from .collection import FargvChoice, FargvPositional, FargvPostional
+from .collection import FargvChoice, FargvVariadic, FargvPositional, FargvPostional
 from .stream import FargvStream, FargvInputStream, FargvOutputStream
 from .path import FargvPath, FargvExistingFile, FargvNonExistingFile, FargvFile
 from .tuple_param import FargvTuple

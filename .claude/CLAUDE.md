@@ -34,7 +34,7 @@ The original function-based API. Exposed as `from fargv import fargv` (the `farg
 - `bool` → boolean flag (bare `-flag` sets to True)
 - `str` → string param (supports `{key}` interpolation across params)
 - `tuple` → choice param (first element is default)
-- `set` → positional param (catch-all for unmatched tokens, tab-separated internally)
+- `set` → variadic param (catch-all for unmatched tokens, tab-separated internally)
 
 Returns `(namespace, help_str)` — namespace is `SimpleNamespace` by default, also supports `dict` and `namedtuple`.
 
@@ -82,7 +82,7 @@ Type inference for dataclass fields:
 - `bool` annotation or `bool` default → `FargvBool`
 - `str` annotation or `str` default → `FargvStr`
 - `tuple` default → `FargvChoice` (first element is default)
-- `list` / `set` default → `FargvPositional`
+- `list` / `set` default → `FargvVariadic`
 - nested `dict` default (all values are dicts/callables/`ArgumentParser`) → `FargvSubcommand`
 - `FargvParameter` instance as default → used as-is (set via `field(default_factory=...)`)
 - Fields with no default are mandatory (`REQUIRED` sentinel internally)
@@ -141,7 +141,7 @@ The subcommand token may appear anywhere in argv; flags are routed by name not p
 | `FargvBool` | boolean flag |
 | `FargvStr` | string with `{key}` cross-interpolation |
 | `FargvChoice` | enum from a list; first item is default |
-| `FargvPositional` | ordered list of unmatched positional tokens |
+| `FargvVariadic` | ordered list of unmatched argv tokens (0-N variadic); `FargvPositional` is a backward-compat alias |
 | `FargvStream` / `FargvInputStream` / `FargvOutputStream` | file/stdin/stdout/stderr |
 | `FargvPath` / `FargvExistingFile` / `FargvNonExistingFile` / `FargvFile` | path with validation |
 | `FargvTuple` | fixed-length typed tuple (via `ast.literal_eval`) |
@@ -152,12 +152,14 @@ The subcommand token may appear anywhere in argv; flags are routed by name not p
 
 ## Planned Features
 
-1. **Remove `init_config_if_missing`** — auto-creating config files on first run is dangerous: it silently persists stale defaults that survive code changes and cause subtle override bugs (see nprenet's `FargvPositional` report). Config should only be created explicitly via `--config=//json` etc.
-2. **`src/` layout migration** — move `fargv/` → `src/fargv/`
-2. **Sphinx docs** — MyST (Markdown), auto-generated from docstrings
-3. **Sub-command design with dataclasses** — nested dataclass fields as subcommand definitions
-4. **Google Fire-like decorator** — `@fargv.cli` wrapping any function
-5. **Dynamic return type** — re-parseable namespace object
+1. **Fix `apply_config` and `dump_config` for variadics** — even with auto-creation disabled, a manually-created config containing a variadic key will still override the coded default. `dump_config` should skip `FargvVariadic` params; `apply_config` should silently ignore variadic keys. Once fixed, add a second spec test covering the manual config case.
+2. **Rename `auto_define_config`** — misleading name; sounds like "auto-create a config file" but actually means "inject the `--config` parameter into the parser". Better name: `auto_define_config_param` or `inject_config_param`.
+3. **Remove `init_config_if_missing`** — auto-creating config files on first run is dangerous: it silently persists stale defaults that survive code changes and cause subtle override bugs (see nprenet's `FargvVariadic` / stale-config report). Config should only be created explicitly via `--config=//json` etc.
+4. **`src/` layout migration** — move `fargv/` → `src/fargv/`
+5. **Sphinx docs** — MyST (Markdown), auto-generated from docstrings
+6. **Sub-command design with dataclasses** — nested dataclass fields as subcommand definitions
+7. **Google Fire-like decorator** — `@fargv.cli` wrapping any function
+8. **Dynamic return type** — re-parseable namespace object
 
 ---
 

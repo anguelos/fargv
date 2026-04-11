@@ -35,9 +35,9 @@ Both styles may be active simultaneously on the same parser.
 #### Global parameters
 
 Parent-level parameters are shared across all subcommands.
-Defining a `FargvPositional` at the parent level while subcommands are
-active raises a warning on `sys.stderr` (positional token is ambiguous
-— is it a subcommand name or a positional value?).
+Defining a `FargvVariadic` at the parent level while subcommands are
+active raises a warning on `sys.stderr` (variadic token is ambiguous
+— is it a subcommand name or a variadic value?).
 
 #### Nesting
 
@@ -212,7 +212,7 @@ annotations and return `FargvTuple` with the element types baked in.
   `auto_configure` output.
 - Sub-command `"nested"` and `"tuple"` return modes.
 - Sub-command flag style (`--subcommand=train`) implementation.
-- Sub-command: decide whether to allow a global positional alongside
+- Sub-command: decide whether to allow a global variadic alongside
   subcommands or hard-error.
 - GUI modes: `"tk"`, `"qt"`, `"jupyter"` (currently raise `NotImplementedError`).
 - **`itk` interactive GUI mode** — concurrent Tk window with Start/Kill/Update/Reset/Help;
@@ -284,7 +284,7 @@ p.link(FargvConfigBackend("~/.train.json")).link(FargvFuseBackend())
 
 - Scalar params: plain string representation (`str(value)`) followed by
   a newline — compatible with `cat` and `echo`.
-- List / positional params: one element per line.
+- List / variadic params: one element per line.
 - Choice params: current value on line 1; available choices on subsequent
   lines (read-only lines 2+), so `cat` shows the menu.
 - A write that fails validation leaves the file content unchanged and

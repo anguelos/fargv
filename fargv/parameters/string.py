@@ -37,11 +37,12 @@ class FargvStr(FargvParameter):
         :param description: Help text.
         """
         super().__init__(default, name, short_name, description)
-        self.other_string_params: Dict[str, "FargvStr"] = {}
-        """Mapping from sibling parameter names to their :class:`FargvStr` instances.
+        self.other_string_params: Dict[str, "FargvParameter"] = {}
+        """Mapping from parameter names (any type) to their :class:`FargvParameter` instances.
 
         Used during :attr:`value` resolution to expand ``{key}`` placeholders.
-        Populated automatically by :func:`~fargv.type_detection.dict_to_parser`.
+        Any parameter type is accepted: ``{epochs}`` resolves an int param, etc.
+        Populated automatically by :func:`~fargv.type_detection._link_string_params`.
         """
 
     @property
@@ -57,9 +58,9 @@ class FargvStr(FargvParameter):
     def value(self) -> str:
         r"""Return the current string value with ``{key}`` references resolved.
 
-        Resolution is recursive: if ``{a}`` expands to a string that itself
-        contains ``{b}``, the inner reference is resolved too.  Cycles are
-        broken by leaving the problematic placeholder unexpanded.
+        Any registered parameter can be referenced by name.  :class:`FargvStr`
+        siblings are resolved recursively; other types are stringified.
+        Unknown keys and cycles are left as literal ``{key}`` placeholders.
 
         :return: Fully interpolated string.
         """
@@ -67,12 +68,17 @@ class FargvStr(FargvParameter):
             def replace_ref(match):
                 ref_key = match.group(1)
                 if ref_key in visiting:
-                    raise ValueError(f"Circular reference detected involving key: \'{ref_key}\'")
+                    return "{" + ref_key + "}"   # cycle — leave unexpanded
                 if ref_key not in self.other_string_params:
-                    return f"{{{ref_key}}}"
-                visiting.add(ref_key)
-                result = resolve(self.other_string_params[ref_key]._value, visiting)
-                visiting.discard(ref_key)
-                return result
+                    return "{" + ref_key + "}"   # unknown key — leave unexpanded
+                ref_param = self.other_string_params[ref_key]
+                if isinstance(ref_param, FargvStr):
+                    visiting.add(ref_key)
+                    result = resolve(ref_param._value, visiting)
+                    visiting.discard(ref_key)
+                    return result
+                # Non-string param: stringify its current value
+                val = ref_param._value
+                return str(val) if val is not None else "{" + ref_key + "}"
             return re.sub(r"\{(\w+)\}", replace_ref, raw)
         return resolve(self._value, set())

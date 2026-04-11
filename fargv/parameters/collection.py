@@ -1,4 +1,4 @@
-"""Collection-type parameters: enumerated choices and positional argument lists."""
+"""Collection-type parameters: enumerated choices and variadic argument lists."""
 from typing import Optional, List
 from .base import FargvParameter, FargvError
 
@@ -89,19 +89,18 @@ class FargvChoice(FargvParameter):
         return list(values[1:])
 
 
-class FargvPositional(FargvParameter):
-    """Collects remaining positional tokens into an ordered list.
+class FargvVariadic(FargvParameter):
+    """Collects unmatched argv tokens into an ordered list (0-N variadic).
 
-    Positional parameters do not start with ``--``.  Any argv token that is
-    not matched by a named parameter is routed here by
+    Any argv token not matched by a named parameter is routed here by
     :class:`~fargv.parser.ArgumentParser`.
 
     Example::
 
-        FargvPositional(name="files")
+        FargvVariadic(name="files")
         # prog --count=2 a.txt b.txt  →  {"files": ["a.txt", "b.txt"]}
 
-    There can be at most one :class:`FargvPositional` per parser.
+    There can be at most one :class:`FargvVariadic` per parser.
     """
 
     def __init__(self, default: Optional[List[str]] = None, name: Optional[str] = None,
@@ -109,13 +108,13 @@ class FargvPositional(FargvParameter):
         """
         :param default:     Starting list (default: empty list).
         :param name:        Positional name shown in help output.
-        :param short_name:  Unused for positionals; included for API consistency.
+        :param short_name:  Unused for variadic params; included for API consistency.
         :param description: Help text.
         """
         super().__init__(default if default is not None else [], name, short_name, description)
 
     @property
-    def is_positional(self) -> bool:
+    def is_variadic(self) -> bool:
         """Always ``True``."""
         return True
 
@@ -141,10 +140,11 @@ class FargvPositional(FargvParameter):
         """Consume *all* supplied tokens and store them as the value list.
 
         :param values: Zero or more raw argv tokens.
-        :return: Always ``[]`` — positional parameters consume everything.
+        :return: Always ``[]`` — variadic parameters consume everything.
         """
         self._value = list(values)
         return []
 
 
-FargvPostional = FargvPositional  # backward-compatible alias (typo preserved)
+FargvPositional = FargvVariadic  # backward-compatible alias (renamed from FargvPositional)
+FargvPostional = FargvVariadic   # backward-compatible alias (typo preserved)

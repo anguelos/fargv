@@ -13,7 +13,7 @@ fargv parameter types that have no Python literal counterpart.
 | `str` | `"hello"` | `FargvStr` | `"hello"` | `--name=Alice` | Supports `{key}` cross-parameter interpolation |
 | `tuple` (3+ items) | `("a","b","c")` | `FargvChoice` | `("a","b","c")` | `--mode=b` | First element is the default; 2-item tuple is `(default, description)` |
 | `list` | `[]` | `FargvPositional` | `set()` | `file1.txt file2.txt` | Collects unmatched tokens; no `--` prefix on CLI |
-| `set` | `set()` | `FargvPositional` | `set()` | `file1.txt file2.txt` | Same as `list`; legacy API uses `set` for positionals |
+| `set` | `set()` | `FargvVariadic` | `set()` | `file1.txt file2.txt` | Same as `list`; legacy API uses `set` for variadics |
 | `dict` (all vals dicts) | `{"train":{...}}` | `FargvSubcommand` | — | `prog train --lr=0.1` | Git-style subcommand; flag style `--cmd=train` also works |
 | *(none)* | — | `FargvInputStream` | — | `--data=corpus.txt` | Defaults to `sys.stdin`; accepts file paths or `stdin` |
 | *(none)* | — | `FargvOutputStream` | — | `--out=results.txt` | Defaults to `sys.stdout`; accepts file paths, `stdout`, or `stderr` |
@@ -69,7 +69,7 @@ FargvChoice(["adam", "sgd", "rmsprop"], name="opt")
 
 ### `FargvPositional`
 
-At most one positional parameter is supported per parser.  All tokens that
+At most one variadic parameter is supported per parser.  All tokens that
 do not start with the long or short prefix are routed to it.
 
 ```python

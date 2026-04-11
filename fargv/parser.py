@@ -6,7 +6,7 @@ but can also be used directly for full control over parser construction.
 import os
 import sys
 from typing import Dict, Optional, List, Union, Any, Set
-from .parameters import FargvError, FargvParameter, FargvPositional, FargvBoolHelp
+from .parameters import FargvError, FargvParameter, FargvVariadic, FargvBoolHelp
 from .global_guessing import guess_program_name
 from .ansi import bold_white, gray, is_colored
 
@@ -45,8 +45,8 @@ class ArgumentParser:
     parameters:
         Optional list or dict of :class:`~fargv.parameters.base.FargvParameter`
         instances to pre-register.
-    allow_default_positional:
-        When ``True`` (default), a single :class:`~fargv.parameters.collection.FargvPositional`
+    allow_default_variadic:
+        When ``True`` (default), a single :class:`~fargv.parameters.collection.FargvVariadic`
         param automatically absorbs any leftover tokens.
     auto_help:
         Deprecated; ignored.
@@ -60,14 +60,14 @@ class ArgumentParser:
 
     def __init__(self, progname: Optional[str] = None,
                  parameters: Optional[Union[List[FargvParameter], Dict[str, FargvParameter]]] = None,
-                 allow_default_positional: bool = True,
+                 allow_default_variadic: bool = True,
                  auto_help: bool = True,
                  auto_bash_autocomplete: bool = True,
                  long_prefix: str = "--",
                  short_prefix: str = "-"):
         self._name2parameters: Dict[str, FargvParameter] = {}
         self._shortname2parameters: Dict[str, FargvParameter] = {}
-        self.allow_default_positional = allow_default_positional
+        self.allow_default_variadic = allow_default_variadic
         self.long_prefix  = long_prefix
         self.short_prefix = short_prefix
         self.name = progname if progname is not None else guess_program_name(level=1)
@@ -84,18 +84,18 @@ class ArgumentParser:
 
     # ─────────────────────────────────── helpers ────────────────────────────
 
-    def _get_default_positional(self, active_params=None) -> Optional[FargvPositional]:
-        """Return the single :class:`~fargv.parameters.collection.FargvPositional` param, or ``None``.
+    def _get_default_variadic(self, active_params=None) -> Optional[FargvVariadic]:
+        """Return the single :class:`~fargv.parameters.collection.FargvVariadic` param, or ``None``.
 
-        A default positional is only returned when exactly one positional parameter
-        is registered AND :attr:`allow_default_positional` is ``True``.
+        A default variadic is only returned when exactly one variadic parameter
+        is registered AND :attr:`allow_default_variadic` is ``True``.
 
         :param active_params: Restrict the search to this sub-dict when provided.
-        :return: The positional parameter, or ``None``.
+        :return: The variadic parameter, or ``None``.
         """
         params = active_params if active_params is not None else self._name2parameters
-        res = [p for p in params.values() if p.is_positional]
-        if len(res) == 1 and self.allow_default_positional:
+        res = [p for p in params.values() if p.is_variadic]
+        if len(res) == 1 and self.allow_default_variadic:
             return res[0]
         return None
 
@@ -212,7 +212,7 @@ class ArgumentParser:
         then *sub_params*; parent wins when the same name exists in both.
         Short flags are matched against *parent_short* then *sub_short*.
         Positional (non-flag) tokens go to the sub bucket unless the parent
-        has a positional parameter and the sub does not.
+        has a variadic parameter and the sub does not.
 
         :param tokens:    All argv tokens after the subcommand token has been removed.
         :return: ``(parent_tokens, sub_tokens)``
@@ -221,8 +221,8 @@ class ArgumentParser:
         from .parameters.base import FargvError
         lp = self.long_prefix
         sp = self.short_prefix
-        parent_has_positional = any(p.is_positional for p in parent_params.values())
-        sub_has_positional    = any(p.is_positional for p in sub_params.values())
+        parent_has_variadic = any(p.is_variadic for p in parent_params.values())
+        sub_has_variadic    = any(p.is_variadic for p in sub_params.values())
         parent_out: list = []
         sub_out:    list = []
         i = 0
@@ -277,8 +277,8 @@ class ArgumentParser:
                     i += 1
                     bucket.append(tokens[i])
             else:
-                # Positional token: parent if parent has positional and sub does not
-                if parent_has_positional and not sub_has_positional:
+                # Unmatched token: route to parent if parent has variadic and sub does not
+                if parent_has_variadic and not sub_has_variadic:
                     parent_out.append(tok)
                 else:
                     sub_out.append(tok)
@@ -342,7 +342,7 @@ class ArgumentParser:
         1. Expand combined short flags (``-vd`` → ``--verbose --debug``).
         2. Split the token list at long-flag boundaries.
         3. Dispatch each flag's value tokens to the matching parameter.
-        4. Route leftovers to the default positional (or raise).
+        4. Route leftovers to the default variadic (or raise).
         5. Verify all mandatory parameters have been supplied.
 
         :param argv:                        Token list (program name already stripped).
@@ -441,17 +441,30 @@ class ArgumentParser:
         leftovers = pre_leftovers + leftovers
 
         if leftovers:
-            default_pos = self._get_default_positional(active)
+            default_pos = self._get_default_variadic(active)
             if default_pos is not None:
                 default_pos.ingest_value_strings(*leftovers)
             elif not tolerate_unassigned_arguments:
-                raise FargvError(f"Unexpected positional arguments: {leftovers}")
+                raise FargvError(f"Unexpected unmatched arguments: {leftovers}")
 
         for pname, param in active.items():
             if param._mandatory and not param.has_value:
                 raise FargvError(f"Required parameter '{pname}' was not provided")
 
         return {n: p.value for n, p in active.items()}
+
+    def _finalize_string_params(self) -> None:
+        """Bake resolved ``{key}`` interpolation into each :class:`~fargv.parameters.string.FargvStr`.
+
+        After all override sources (config file, env vars, CLI) have been applied,
+        calling this method sets ``param._value = param.value`` for every
+        :class:`~fargv.parameters.string.FargvStr`, so that subsequent reads of
+        ``_value`` return the fully resolved string rather than the template.
+        """
+        from .parameters.string import FargvStr
+        for param in self._name2parameters.values():
+            if isinstance(param, FargvStr):
+                param._value = param.value
 
     # ───────────────────────────── output helpers ───────────────────────────
 

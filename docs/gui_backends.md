@@ -41,7 +41,7 @@ The Tk dialog renders one row per parameter:
 
 - **bool** → `ttk.Checkbutton`
 - **choice** → `ttk.Combobox` (read-only)
-- **positional list** → `ttk.Entry` (space-separated tokens)
+- **variadic list** → `ttk.Entry` (space-separated tokens)
 - **subcommand** → `ttk.Combobox` selector + dynamic `ttk.LabelFrame` that
   re-renders when the selection changes; values typed before switching are
   preserved
