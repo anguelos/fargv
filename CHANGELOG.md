@@ -9,6 +9,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.2] — 2026-04-11
+
+### Fixed
+
+- **`setup.py` now uses `find_packages()`** — the hardcoded `packages=['fargv']`
+  list omitted the `fargv.parameters` sub-package, so any user who installed
+  from PyPI (not editable source) got `ModuleNotFoundError: No module named
+  'fargv.parameters'` on `import fargv`.  Reported by: rafaeldominiquini.
+
+- **CI: replaced `pytest --cov` with `coverage run`** — `pytest-cov`'s teardown
+  hook races with pytest's capture cleanup on Python 3.12.13, causing a spurious
+  `ValueError: I/O operation on closed file` in `_pytest/capture.py` after all
+  tests pass; exit code was 1 despite a clean suite.  Running coverage as the
+  outer process (`coverage run --branch -m pytest …`) avoids the plugin entirely.
+
+- **CI: remove `coverage.json` before badge branch switch** — the coverage JSON
+  file written to the working tree caused `git checkout badges` to abort with
+  "Your local changes … would be overwritten by checkout".
+
+- **CI: pinned `pytest==9.0.2` and `pytest-cov==7.0.0`** in `[dev]` extras to
+  prevent silent version drift between local and CI environments.
+
+- **CI: bumped GitHub Actions to Node.js 24-compatible versions** —
+  `actions/checkout@v4.2.2` and `actions/setup-python@v5.3.0`.
+
+---
+
 ## [1.3.1] — 2026-04-11
 
 ### Changed
@@ -73,5 +100,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-[Unreleased]: https://github.com/anguelos/fargv/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/anguelos/fargv/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/anguelos/fargv/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/anguelos/fargv/compare/v1.3.0...v1.3.1
