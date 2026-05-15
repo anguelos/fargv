@@ -239,6 +239,25 @@ class FargvParameter(ABC):
                     if self._env_var_name is not None and verbosity > 0 else "")
         return f"  {name_str}{short_str} {type_str}  {desc_str}  [default: {default_str}]{env_str}"
 
+    # ── Repr ──────────────────────────────────────────────────────────────
+
+    def _base_repr_kwargs(self) -> list:
+        """Return ``['name=...', 'short_name=...', 'description=...']`` for non-None attrs."""
+        parts = []
+        if self._name is not None:
+            parts.append(f"name={self._name!r}")
+        if self._short_name is not None:
+            parts.append(f"short_name={self._short_name!r}")
+        if self._description is not None:
+            parts.append(f"description={self._description!r}")
+        return parts
+
+    def __repr__(self) -> str:
+        """Return ``eval``-able constructor string for this parameter."""
+        default = REQUIRED if self._mandatory else self._default
+        args = [repr(default)] + self._base_repr_kwargs()
+        return f"{type(self).__name__}({', '.join(args)})"
+
     # ── Parsing ────────────────────────────────────────────────────────────
 
     def validate_value_strings(self, *values: List[str]) -> bool:

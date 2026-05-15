@@ -15,7 +15,7 @@ setup(
     url='https://github.com/anguelos/fargv',
     description="A very easy to use argument parser.",
     long_description_content_type="text/markdown",
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='utf-8').read() if __import__('os').path.exists('README.md') else '',
     # download_url = 'https://github.com/anguelos/fargv/archive/0.1.3.tar.gz',
     keywords = ["argv", "CLI", "argument", "GUI", "parser", "command", "line", "interface"],
     classifiers=[
@@ -28,7 +28,7 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Topic :: Scientific/Engineering"],
-    install_requires=[],
+    install_requires=["deep-dataclasses"],
     extras_require={
         "dev": [
             "pytest==9.0.2",

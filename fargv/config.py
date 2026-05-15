@@ -204,7 +204,8 @@ def apply_overrides(
     name2parameters: Dict[str, Any],
     overrides: Dict[str, Any],
     source: str,
-    unknown_keys: Literal["raise", "ignore_key_and_warn", "ignore_dict_and_warn"] = "ignore_dict_and_warn",
+    unknown_keys: Literal["raise", "ignore_key_and_warn", "ignore_dict_and_warn",
+                          "ignore_key_silently"] = "ignore_dict_and_warn",
     separator: str = ".",
 ) -> None:
     """Validate *overrides* against *name2parameters* and apply each value.
@@ -216,6 +217,9 @@ def apply_overrides(
     :param overrides:       Flat ``{key: value}`` dict from config file or env vars.
     :param source:          Human-readable source label for error messages.
     :param unknown_keys:    Policy when a key is not found in the parser.
+                            ``"ignore_key_silently"`` is used for suite config
+                            sections where sibling-tool keys are expected and
+                            should not produce warnings.
     :param separator:       Key separator used to resolve subcommand branch params
                             (``"."`` for config files, ``"_"`` for env vars).
     """
@@ -228,8 +232,11 @@ def apply_overrides(
     unknown = [k for k in overrides if k not in lookup]
 
     if unknown:
-        for k in unknown:
-            print(f"fargv: {source}: unknown key {k!r}", file=sys.stderr)
+        if unknown_keys == "ignore_key_silently":
+            pass  # expected when loading a suite section that has sibling-tool keys
+        else:
+            for k in unknown:
+                print(f"fargv: {source}: unknown key {k!r}", file=sys.stderr)
         if unknown_keys == "raise":
             raise FargvError(
                 f"{source}: unknown key(s): {unknown}. "
@@ -237,7 +244,7 @@ def apply_overrides(
             )
         elif unknown_keys == "ignore_dict_and_warn":
             return
-        # ignore_key_and_warn: apply known keys, skip unknown
+        # ignore_key_and_warn / ignore_key_silently: apply known keys, skip unknown
 
     for key, val in overrides.items():
         if key not in lookup:
@@ -245,10 +252,11 @@ def apply_overrides(
         try:
             lookup[key].evaluate(val)
         except Exception as exc:
-            print(
-                f"fargv: {source}: key {key!r} type error ({exc}) — ignoring",
-                file=sys.stderr,
-            )
+            if unknown_keys != "ignore_key_silently":
+                print(
+                    f"fargv: {source}: key {key!r} type error ({exc}) — ignoring",
+                    file=sys.stderr,
+                )
             if unknown_keys == "raise":
                 raise FargvError(f"{source}: key {key!r}: {exc}") from exc
 
@@ -625,6 +633,230 @@ def _dump_yaml(parser, exclude) -> str:
         result.append("")
     return "\n".join(result)
 
+
+
+# ---------------------------------------------------------------------------
+# Suite config: multi-tool shared config file
+# ---------------------------------------------------------------------------
+
+def load_suite_config(
+    tool_cls: type,
+    suite_cls: type,
+    config: Dict[str, Any],
+    name2parameters: Dict[str, Any],
+) -> None:
+    """Apply a suite config dict to *name2parameters* using the MRO cascade.
+
+    The cascade visits each class in ``tool_cls.__mro__`` that corresponds to a
+    section in *suite_cls* (auxiliary or real tool), from base to derived.
+    For each such class, if the config has a matching top-level key whose value
+    is a dict, that dict is applied to *name2parameters*.  Unknown keys within
+    a section are silently ignored (they belong to sibling tools or base classes
+    that this tool doesn't declare).
+
+    Top-level scalar values from *suite_cls*'s direct global fields are applied
+    first, before the per-section cascade.
+
+    :param tool_cls:        The dataclass being parsed (e.g. ``DdpMsConfigs.MsStatic``).
+    :param suite_cls:       The suite root (e.g. ``DdpMsConfigs``).
+    :param config:          Loaded config dict (from :func:`load_config`).
+    :param name2parameters: ``{name: FargvParameter}`` for the current tool's parser.
+    """
+    from .suite import tool_config_cascade, suite_global_fields
+
+    # Apply truly global params (direct fields of suite_cls, at top level of config)
+    global_names = set(suite_global_fields(suite_cls))
+    if global_names:
+        global_overrides = {k: v for k, v in config.items()
+                            if k in global_names and not isinstance(v, dict)}
+        if global_overrides:
+            apply_overrides(name2parameters, global_overrides,
+                            source=f"config [{suite_cls.__name__}]",
+                            unknown_keys="ignore_key_silently")
+
+    # MRO cascade: base sections first, derived sections last
+    for section_name, _section_cls in tool_config_cascade(tool_cls, suite_cls):
+        if section_name == suite_cls.__name__:
+            continue  # global fields already handled above
+        section_data = config.get(section_name)
+        if isinstance(section_data, dict):
+            apply_overrides(name2parameters, section_data,
+                            source=f"config [{section_name}]",
+                            unknown_keys="ignore_key_silently")
+
+
+def dump_suite_config(
+    suite_cls: type,
+    fmt: str = "json",
+    current_tool_cls: Optional[type] = None,
+    current_parser=None,
+    exclude=None,
+) -> str:
+    """Serialise the full suite config with one section per class.
+
+    Each section contains only the fields declared directly in that class
+    (not inherited ones).  For the currently-running tool, ``current_parser``
+    values are used; all other classes use their coded defaults.
+
+    Section headers match the ``── ClassName ──`` format used in ``--help``.
+
+    :param suite_cls:         The suite root (e.g. ``DdpMsConfigs``).
+    :param fmt:               Output format — ``"json"``, ``"ini"``, ``"toml"``, ``"yaml"``.
+    :param current_tool_cls:  The tool class being run, or ``None``.
+    :param current_parser:    The live :class:`~fargv.parser.ArgumentParser` for
+                              *current_tool_cls*, used to read current param values.
+    :param exclude:           Param names to omit from the dump.
+    """
+    from .suite import suite_all_sections, suite_global_fields, own_field_names
+    from .type_detection import dataclass_to_parser
+
+    exclude_set = set(exclude or [])
+
+    # Build (section_name, parser_or_None, own_field_names) triples.
+    # For the current tool we reuse the live parser; for all others we build
+    # a temporary one just to read coded defaults.
+    sections: list[tuple[str, Any, list[str]]] = []
+
+    # Truly global params at the top of the file
+    global_names = list(suite_global_fields(suite_cls).keys())
+    if global_names:
+        global_parser = dataclass_to_parser(suite_cls)
+        sections.append((suite_cls.__name__, global_parser, global_names))
+
+    for section_name, section_cls in suite_all_sections(suite_cls):
+        own = [n for n in own_field_names(section_cls) if n not in exclude_set]
+        if not own:
+            continue
+        if current_tool_cls is not None and section_cls is current_tool_cls and current_parser is not None:
+            parser = current_parser
+        else:
+            parser = dataclass_to_parser(section_cls)
+        sections.append((section_name, parser, own))
+
+    if fmt == "json":
+        return _dump_suite_json(sections, exclude_set)
+    elif fmt == "ini":
+        return _dump_suite_ini(sections, exclude_set)
+    elif fmt == "toml":
+        return _dump_suite_toml(sections, exclude_set)
+    elif fmt == "yaml":
+        return _dump_suite_yaml(sections, exclude_set)
+    else:
+        raise ValueError(
+            f"Unsupported config format: {fmt!r}. "
+            f"Available: {supported_dump_formats()}"
+        )
+
+
+def _suite_section_sep(label: str) -> str:
+    """Section separator matching the ``── ClassName ──`` help format."""
+    return f"── {label} ──"
+
+
+def _dump_suite_json(sections, exclude_set) -> str:
+    data: Dict[str, Any] = {}
+    first_section = sections[0][0] if sections else None
+    for section_name, parser, own_names in sections:
+        data[f"fargv_comment__section_{section_name}"] = _suite_section_sep(section_name)
+        section_data: Dict[str, Any] = {}
+        for name in own_names:
+            if name not in parser._name2parameters:
+                continue
+            param = parser._name2parameters[name]
+            if getattr(param, "filter_out", False):
+                continue
+            section_data[f"fargv_comment_{name}"] = _param_doc(param)
+            val, include = _serialise_value(param)
+            if include:
+                section_data[name] = val
+        # Global params go flat; all others go nested under their class name
+        if section_name == first_section and not any(
+            isinstance(v, dict) for v in section_data.values()
+        ):
+            # Heuristic: first section with no nested dicts = global → flat
+            data.update(section_data)
+        else:
+            data[section_name] = section_data
+    return json.dumps(data, indent=2, default=str)
+
+
+def _dump_suite_ini(sections, exclude_set) -> str:
+    body: list = []
+    first = True
+    first_section_name = sections[0][0] if sections else None
+    for section_name, parser, own_names in sections:
+        if not first:
+            body.append("")
+        body.append(_sep(";", _suite_section_sep(section_name)))
+        body.append("")
+        # Global params go in [main]; others in [ClassName]
+        ini_section = "main" if section_name == first_section_name else section_name
+        if first:
+            body.append(f"[{ini_section}]")
+            first = False
+        else:
+            body.append(f"[{ini_section}]")
+        for name in own_names:
+            if name not in parser._name2parameters:
+                continue
+            param = parser._name2parameters[name]
+            if getattr(param, "filter_out", False) or getattr(param, "is_variadic", False):
+                continue
+            val, include = _serialise_value(param)
+            if not include:
+                continue
+            val_str = " ".join(str(v) for v in val) if isinstance(val, list) else ("" if val is None else str(val))
+            body.append(f"; {_param_doc(param)}")
+            body.append(f"{name} = {val_str}")
+        body.append("")
+    return "\n".join(body)
+
+
+def _dump_suite_toml(sections, exclude_set) -> str:
+    body: list = []
+    first_section_name = sections[0][0] if sections else None
+    for section_name, parser, own_names in sections:
+        body.append(_sep("#", _suite_section_sep(section_name)))
+        body.append("")
+        if section_name != first_section_name:
+            body.append(f"[{section_name}]")
+        for name in own_names:
+            if name not in parser._name2parameters:
+                continue
+            param = parser._name2parameters[name]
+            if getattr(param, "filter_out", False) or getattr(param, "is_variadic", False):
+                continue
+            val, include = _serialise_value(param)
+            if not include:
+                continue
+            body.append(f"# {_param_doc(param)}")
+            body.append(f"{name} = {_to_toml_literal(val)}")
+        body.append("")
+    return "\n".join(body)
+
+
+def _dump_suite_yaml(sections, exclude_set) -> str:
+    body: list = []
+    first_section_name = sections[0][0] if sections else None
+    for section_name, parser, own_names in sections:
+        body.append(_sep("#", _suite_section_sep(section_name)))
+        body.append("")
+        indent = "" if section_name == first_section_name else "  "
+        if section_name != first_section_name:
+            body.append(f"{section_name}:")
+        for name in own_names:
+            if name not in parser._name2parameters:
+                continue
+            param = parser._name2parameters[name]
+            if getattr(param, "filter_out", False) or getattr(param, "is_variadic", False):
+                continue
+            val, include = _serialise_value(param)
+            if not include:
+                continue
+            body.append(f"{indent}# {_param_doc(param)}")
+            body.append(f"{indent}{name}: {_to_yaml_scalar(val)}")
+        body.append("")
+    return "\n".join(body)
 
 
 # ---------------------------------------------------------------------------

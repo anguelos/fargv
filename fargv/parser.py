@@ -67,6 +67,7 @@ class ArgumentParser:
                  short_prefix: str = "-"):
         self._name2parameters: Dict[str, FargvParameter] = {}
         self._shortname2parameters: Dict[str, FargvParameter] = {}
+        self._param_groups: List[tuple] = []   # [(group_label, [param_names])]
         self.allow_default_variadic = allow_default_variadic
         self.long_prefix  = long_prefix
         self.short_prefix = short_prefix
@@ -117,7 +118,7 @@ class ArgumentParser:
                 raise FargvError(f"Duplicate parameter short name '{parameter.short_name}'")
             self._shortname2parameters[parameter.short_name] = parameter
 
-    def infer_short_names(self) -> None:
+    def infer_short_names(self, parent_taken: set = None) -> None:
         """Assign short single-character aliases to parameters that lack one.
 
         Only parameters whose :attr:`~fargv.parameters.base.FargvParameter.short_name`
@@ -133,11 +134,21 @@ class ArgumentParser:
         If no single-character candidate is ever free the parameter receives no
         short name.  Already-registered explicit short names (from
         :meth:`_add_parameter`) are never displaced.
+
+        :param parent_taken: Optional set of short names already used by the
+            parent parser, so sub-parsers do not reuse the same characters.
         """
         taken: set = set(self._shortname2parameters.keys())
+        if parent_taken:
+            taken |= parent_taken
+        # after we finish, propagate our final taken set to sub-parsers
+        # (subcommand params build their parsers before we run, so we push down)
+        _final_taken = taken  # will be updated in-loop; captured by closure below
         for name, param in self._name2parameters.items():
             if param.short_name is not None:
                 continue  # explicit short name — leave it alone
+            if getattr(param, 'is_subcommand', False):
+                continue  # subcommands are positional tokens, not flags
             words = [w for w in name.split("_") if w]
             max_len = max(len(w) for w in words)
             assigned = False
@@ -156,6 +167,12 @@ class ArgumentParser:
                         break
                 if assigned:
                     break
+
+        # Propagate to subcommand params so they use it when they build sub-parsers
+        from .parameters.subcommand import FargvSubcommand as _FargvSubcommand
+        for param in self._name2parameters.values():
+            if isinstance(param, _FargvSubcommand):
+                param._parent_taken = set(taken)
 
     def _find_subcommand_param(self):
         """Return the first :class:`~fargv.parameters.subcommand.FargvSubcommand` found.
@@ -582,6 +599,19 @@ class ArgumentParser:
                 body = gray(body, colored=True)
             lines += [header, body, ""]
         lines += [bold_white(f"Usage: {prog} [OPTIONS]", colored=c), ""]
-        for param in self._name2parameters.values():
-            lines.append(param.docstring(colored=c, verbosity=verbosity))
+        if self._param_groups:
+            all_grouped = {n for _, names in self._param_groups for n in names}
+            for group_label, param_names in self._param_groups:
+                sep = f"── {group_label} ──"
+                lines.append(bold_white(sep, colored=c))
+                for name in param_names:
+                    if name in self._name2parameters:
+                        lines.append(self._name2parameters[name].docstring(colored=c, verbosity=verbosity))
+                lines.append("")
+            ungrouped = [p for k, p in self._name2parameters.items() if k not in all_grouped]
+            for param in ungrouped:
+                lines.append(param.docstring(colored=c, verbosity=verbosity))
+        else:
+            for param in self._name2parameters.values():
+                lines.append(param.docstring(colored=c, verbosity=verbosity))
         return "\n".join(lines)

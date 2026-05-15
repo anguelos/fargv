@@ -238,6 +238,138 @@ checks env var names that correspond to known parameters.
 
 ---
 
+## Sharing a config file across multiple CLI tools
+
+When a project contains several CLI entry points that share common parameters,
+you can group them under a single *suite class* so they all read from and write
+to **one config file**.
+
+### Design
+
+Define a `@deep_dataclass` whose inner classes are the individual tools.
+Shared parameters live in `@auxiliary` base classes; each tool inherits from
+one or more of them:
+
+```python
+from deep_dataclasses import deep_dataclass, auxiliary
+import fargv
+
+@deep_dataclass
+class DdpMsConfigs:
+    """Suite of microservice CLI tools."""
+
+    @auxiliary
+    @deep_dataclass
+    class GlobalConfig:
+        log_level: str = "INFO"
+        "Logging level shared by all services."
+
+    @deep_dataclass
+    class Microservice(GlobalConfig):
+        host: str = "localhost"
+        port: int = 8080
+
+    @deep_dataclass
+    class MsStatic(Microservice):
+        static_dir: str = "/var/static"
+
+    @deep_dataclass
+    class MsDetection(Microservice):
+        model_path: str = "/models/det.pt"
+        threshold:  float = 0.5
+```
+
+Each tool's entry point calls `fargv.parse` with `suite_root=`:
+
+```python
+# ms_static.py
+cfg, _ = fargv.parse(DdpMsConfigs.MsStatic, suite_root=DdpMsConfigs)
+
+# ms_detection.py
+cfg, _ = fargv.parse(DdpMsConfigs.MsDetection, suite_root=DdpMsConfigs)
+```
+
+### Shared config file path
+
+The config file path is derived from the **suite class name**:
+
+```
+~/.{SuiteClassName}.json       # e.g.  ~/.DdpMsConfigs.json
+```
+
+All tools in the suite read from and write to this same file.
+
+### Config file structure
+
+The file is organised into sections, one per class, each containing only the
+fields **declared directly in that class** (not inherited ones).  Inheritance
+is expressed through the Python MRO, not in the file:
+
+```json
+{
+  "fargv_comment__section_GlobalConfig": "── GlobalConfig ──",
+  "GlobalConfig": {
+    "fargv_comment_log_level": "--log_level <str>  [default: 'INFO']",
+    "log_level": "WARNING"
+  },
+  "fargv_comment__section_Microservice": "── Microservice ──",
+  "Microservice": {
+    "fargv_comment_host": "--host <str>  [default: 'localhost']",
+    "host": "10.0.0.1",
+    "fargv_comment_port": "--port <int>  [default: 8080]",
+    "port": 9000
+  },
+  "fargv_comment__section_MsStatic": "── MsStatic ──",
+  "MsStatic": {
+    "fargv_comment_static_dir": "--static_dir <str>  [default: '/var/static']",
+    "static_dir": "/srv/static"
+  }
+}
+```
+
+### Loading order (MRO cascade)
+
+When `MsStatic` starts, values are applied **base-first** following the MRO,
+so more-derived classes can override base-class defaults:
+
+```
+GlobalConfig section  →  Microservice section  →  MsStatic section
+```
+
+Keys in other tool sections (e.g. `MsDetection`) are silently ignored — no
+warnings, because they are expected sibling-tool data.
+
+### Generating the suite config
+
+The `//format` syntax dumps the **full suite config** (all sections, all tools)
+in one shot:
+
+```bash
+python ms_static.py --config //json > ~/.DdpMsConfigs.json
+```
+
+`--config=` (empty string) also dumps as JSON and exits.
+
+### Environment variables
+
+Env var names use the **tool class name** as the prefix, not `argv[0]`:
+
+| Tool | Parameter | Env var |
+|---|---|---|
+| `MsStatic` | `static_dir` | `MSSTATIC_STATIC_DIR` |
+| `MsDetection` | `threshold` | `MSDETECTION_THRESHOLD` |
+| `MsDetection` | `host` (inherited) | `MSDETECTION_HOST` |
+
+### Pointing to a different config file
+
+The `--config` flag still works as usual:
+
+```bash
+python ms_static.py --config /opt/shared/suite.json
+```
+
+---
+
 ## override_order
 
 The `override_order` list controls which sources are active and which wins.

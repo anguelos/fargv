@@ -31,7 +31,7 @@ from .parameters import (
 from .parser import ArgumentParser
 from .type_detection import definition_to_parser
 from .ansi import gray, bold_white, is_colored
-from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path, supported_dump_formats
+from .config import default_config_path, load_config, apply_config, apply_env_vars, dump_config, scan_config_path, supported_dump_formats, load_suite_config, dump_suite_config
 
 
 _DC = TypeVar("_DC")   # used in @overload signatures for dataclass definitions
@@ -168,24 +168,64 @@ def _available_ui_choices():
 
 def _add_auto_params(parser, auto_help, auto_bash_autocomplete,
                      auto_define_verbosity, auto_define_config,
-                     auto_define_user_interface):
-    if auto_help and "help" not in parser._name2parameters:
-        parser._add_parameter(FargvHelp(parser))
+                     auto_define_user_interface, config_path_override=None):
+    _injected = []   # names freshly added here (not already declared as fields)
+
+    if auto_help:
+        if "help" not in parser._name2parameters:
+            parser._add_parameter(FargvHelp(parser))
+            _injected.append("help")
+        else:
+            p = parser._name2parameters["help"]
+            if getattr(p, "_param_parser", None) is None and hasattr(p, "_param_parser"):
+                p._param_parser = parser
     if auto_define_verbosity and "verbosity" not in parser._name2parameters:
         parser._add_parameter(FargvVerbosity())
-    if auto_bash_autocomplete and "bash_autocomplete" not in parser._name2parameters:
-        parser._add_parameter(FargvBashAutocomplete(parser))
+        _injected.append("verbosity")
+    if auto_bash_autocomplete:
+        if "bash_autocomplete" not in parser._name2parameters:
+            parser._add_parameter(FargvBashAutocomplete(parser))
+            _injected.append("bash_autocomplete")
+        else:
+            p = parser._name2parameters["bash_autocomplete"]
+            if getattr(p, "_param_parser", None) is None and hasattr(p, "_param_parser"):
+                p._param_parser = parser
     if auto_define_config and "config" not in parser._name2parameters:
-        if _has_proper_program_name(parser):
+        if config_path_override is not None:
+            cfg_default = str(config_path_override)
+        elif _has_proper_program_name(parser):
             cfg_default = str(default_config_path(getattr(parser, "name", "fargv")))
         else:
             cfg_default = ""   # no stable app name — user must supply --config explicitly
         parser._add_parameter(FargvConfig(cfg_default, param_parser=parser, exclude=_AUTO_PARAMS))
-    if auto_define_user_interface and "user_interface" not in parser._name2parameters:
-        if not _is_jupyter():
-            _ui_choices = _available_ui_choices()
-            if len(_ui_choices) > 1:   # at least one GUI backend available
-                parser._add_parameter(FargvUserInterface(_ui_choices))
+        _injected.append("config")
+    if auto_define_user_interface:
+        if "user_interface" not in parser._name2parameters:
+            if not _is_jupyter():
+                _ui_choices = _available_ui_choices()
+                if len(_ui_choices) > 1:
+                    parser._add_parameter(FargvUserInterface(_ui_choices))
+                    _injected.append("user_interface")
+        else:
+            # Pre-declared (e.g. via FargvAutoConfig): expand to runtime choices.
+            p = parser._name2parameters["user_interface"]
+            if hasattr(p, "_choices"):
+                _ui_choices = _available_ui_choices()
+                if _is_jupyter() or len(_ui_choices) <= 1:
+                    p.filter_out = True   # suppress; only "cli" available
+                else:
+                    p._choices = _ui_choices
+                    p._default = _ui_choices[0]
+                    if not p.has_value:
+                        p._value = _ui_choices[0]
+                    p._description = "UI mode — available: " + ", ".join(_ui_choices)
+
+    # Fold any freshly injected auto-params into the first help group so they
+    # appear alongside the other auto-params rather than ungrouped at the end.
+    if parser._param_groups and _injected:
+        label, names = parser._param_groups[0]
+        existing = set(names)
+        parser._param_groups[0] = (label, names + [n for n in _injected if n not in existing])
 
 
 def _reshape_subcommands(raw: Dict[str, Any], subcommand_return_type: str, return_type: str):
@@ -290,6 +330,7 @@ def parse(
     fn_def_tolerate_wildcards: bool = False,
     override_order: List[Literal["default", "config", "envvar", "ui"]] = ["default", "config", "envvar", "ui"],
     employ_docstring_in_help: bool = True,
+    suite_root: Optional[type] = None,
 ) -> Tuple[Any, str]:
     """Parse CLI arguments using the fargv interface.
 
@@ -370,9 +411,22 @@ def parse(
         )
 
     # 3. Add auto-params
+    _config_path_override = None
+    if suite_root is not None:
+        from .suite import suite_config_path as _suite_config_path
+        _config_path_override = _suite_config_path(suite_root)
     _add_auto_params(parser, auto_define_help, auto_define_bash_autocomplete,
                      auto_define_verbosity, auto_define_config,
-                     auto_define_user_interface)
+                     auto_define_user_interface,
+                     config_path_override=_config_path_override)
+    # Wire suite dump_override so --config="" dumps the full suite config
+    if suite_root is not None and "config" in parser._name2parameters:
+        _cfg_param = parser._name2parameters["config"]
+        if hasattr(_cfg_param, "_dump_override") and _cfg_param._dump_override is None:
+            _sr, _dc, _p = suite_root, _dc_cls, parser
+            _cfg_param._dump_override = lambda: dump_suite_config(
+                _sr, "json", _dc, _p, exclude=_AUTO_PARAMS
+            )
     parser.allow_default_variadic = allow_implied_variadics
 
     # 4. Infer short names, then pre-build help string
@@ -433,22 +487,32 @@ def parse(
                         file=sys.stderr,
                     )
                     sys.exit(1)
-                _progname_arg = argv[0] if argv else getattr(parser, 'name', 'fargv')
-                print(dump_config(parser, fmt=_fmt, exclude=_AUTO_PARAMS, progname=_progname_arg))
-                _fmt_ext = {"json": ".json", "ini": ".ini", "toml": ".toml", "yaml": ".yaml"}.get(_fmt, f".{_fmt}")
-                _default_path = default_config_path(_progname_arg).with_suffix(_fmt_ext)
+                if suite_root is not None:
+                    print(dump_suite_config(suite_root, _fmt, _dc_cls, parser, exclude=_AUTO_PARAMS))
+                    _persist_path = _config_path_override
+                else:
+                    _progname_arg = argv[0] if argv else getattr(parser, 'name', 'fargv')
+                    print(dump_config(parser, fmt=_fmt, exclude=_AUTO_PARAMS, progname=_progname_arg))
+                    _fmt_ext = {"json": ".json", "ini": ".ini", "toml": ".toml", "yaml": ".yaml"}.get(_fmt, f".{_fmt}")
+                    _persist_path = default_config_path(_progname_arg).with_suffix(_fmt_ext)
                 print(
-                    f"fargv: to persist, redirect to: {_default_path}",
+                    f"fargv: to persist, redirect to: {_persist_path}",
                     file=sys.stderr,
                 )
                 sys.exit(0)
             try:
                 cfg = load_config(raw_config_path)
-                apply_config(user_params, cfg, raw_config_path)
+                if suite_root is not None and _dc_cls is not None:
+                    load_suite_config(_dc_cls, suite_root, cfg, user_params)
+                else:
+                    apply_config(user_params, cfg, raw_config_path)
             except (ValueError, ImportError) as _cfg_err:
                 print(f"fargv: ignoring config '{raw_config_path}': {_cfg_err}", file=sys.stderr)
         elif _source == "envvar":
-            _progname = argv[0] if argv else getattr(parser, 'name', 'fargv')
+            if suite_root is not None and _dc_cls is not None:
+                _progname = _dc_cls.__name__
+            else:
+                _progname = argv[0] if argv else getattr(parser, 'name', 'fargv')
             apply_env_vars(user_params, _progname)
 
     # 7. CLI parse (always); then optionally launch GUI if --user_interface requests it.

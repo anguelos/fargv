@@ -31,6 +31,7 @@ A **two-element tuple** ``(default, "description string")`` is *not* treated
 as a choice — the description is extracted and the default's type is inferred
 normally.  Use three or more elements for a choice parameter.
 """
+import copy
 import inspect
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -308,6 +309,60 @@ def _extract_field_docstrings(cls) -> Dict[str, str]:
     return result
 
 
+def _field_groups(cls) -> List[tuple]:
+    """Return [(class_name, [field_names])] in MRO order (base-first).
+
+    Only classes that directly declare fields in their own ``__annotations__``
+    produce a group.  Returns an empty list when *cls* has no dataclass ancestors
+    (i.e. is a plain dataclass with no inheritance), keeping single-class parsers
+    rendering flat.
+    """
+    import dataclasses as _dc
+    seen: set = set()
+    groups: List[tuple] = []
+    dc_levels = [k for k in reversed(cls.__mro__)
+                 if k is not object and _dc.is_dataclass(k)]
+    for klass in dc_levels:
+        own_annotations = klass.__dict__.get('__annotations__', {})
+        own_names = [
+            f.name for f in _dc.fields(klass)
+            if f.name in own_annotations and f.name not in seen
+        ]
+        if own_names:
+            groups.append((klass.__name__, own_names))
+            seen.update(own_names)
+    return groups if len(groups) > 1 else []
+
+
+def _is_subcommand_dataclass(cls) -> bool:
+    """True when *cls* is a dataclass whose every field has a dataclass type annotation.
+
+    This is the fargv two-level rule: a dataclass all of whose fields are
+    themselves dataclasses acts as a subcommand container — field names become
+    branch names and field types become branch definitions.
+
+    :param cls: Any Python object.
+    :return:    ``True`` only when *cls* satisfies the two-level rule.
+    """
+    import dataclasses as _dc
+    import typing
+    if not (_dc.is_dataclass(cls) and isinstance(cls, type)):
+        return False
+    fields = _dc.fields(cls)
+    if not fields:
+        return False
+    try:
+        hints = typing.get_type_hints(cls)
+    except Exception:
+        return False
+    return all(
+        f.name in hints
+        and isinstance(hints[f.name], type)
+        and _dc.is_dataclass(hints[f.name])
+        for f in fields
+    )
+
+
 def dataclass_to_parser(
     cls,
     long_prefix: str = "--",
@@ -325,6 +380,13 @@ def dataclass_to_parser(
     definition) are extracted via :func:`_extract_field_docstrings` and used
     as the parameter description when no ``description=`` is already set on
     the ``Fargv*`` instance.
+
+    **Two-level subcommand rule**: when a field's type annotation is a
+    dataclass that itself has *all* fields annotated as dataclasses, that field
+    is treated as a :class:`~fargv.parameters.subcommand.FargvSubcommand`.
+    Field names of the inner dataclass become branch names; field types become
+    branch definitions.  This is what :func:`~fargv.deep_dataclass.deep_dataclass`
+    produces from nested inner-class syntax.
 
     :param cls:          A dataclass **class** (not an instance).
     :param long_prefix:  Long flag prefix (default ``"--"``).
@@ -347,14 +409,19 @@ def dataclass_to_parser(
         annotation = hints.get(name, inspect.Parameter.empty)
         has_default = (field.default    is not _dc.MISSING
                        or field.default_factory is not _dc.MISSING)  # type: ignore[misc]
-        if not has_default:
+
+        if isinstance(annotation, type) and _is_subcommand_dataclass(annotation):
+            sub_hints = typing.get_type_hints(annotation)
+            sub_defs  = {f.name: sub_hints[f.name] for f in _dc.fields(annotation)}
+            fargv_param = FargvSubcommand(sub_defs, name=name)
+        elif not has_default:
             fargv_cls   = _annotation_to_fargv_cls(annotation) or FargvStr
             fargv_param = fargv_cls(REQUIRED, name=name)
         else:
             default = (field.default if field.default is not _dc.MISSING
                        else field.default_factory())  # type: ignore[misc]
             if isinstance(default, FargvParameter):
-                fargv_param = default
+                fargv_param = copy.copy(default)
                 fargv_param._name = name
             else:
                 fargv_cls = _annotation_to_fargv_cls(annotation)
@@ -370,6 +437,7 @@ def dataclass_to_parser(
             fargv_param._description = doc
         parser._add_parameter(fargv_param)
     _link_string_params(parser)
+    parser._param_groups = _field_groups(cls)
     return parser
 
 

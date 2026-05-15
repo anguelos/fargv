@@ -62,10 +62,21 @@ class FargvStream(FargvParameter):
         else:
             raise FargvError(f"FargvStream default must be sys.stdin/stdout/stderr or an open file, got {type(default)}")
 
+    _STREAM_REPR = {
+        "stdin":  "sys.stdin",
+        "stdout": "sys.stdout",
+        "stderr": "sys.stderr",
+    }
+
     @classmethod
     def _get_class_type(cls) -> type:
         """Return :class:`io.TextIOBase` as the target type."""
         return io.TextIOBase
+
+    def __repr__(self) -> str:
+        default_repr = self._STREAM_REPR.get(self.original_path, repr(self.original_path))
+        args = [default_repr] + self._base_repr_kwargs()
+        return f"{type(self).__name__}({', '.join(args)})"
 
     def validate_value_strings(self, value: str) -> bool:
         """Return ``True`` if *value* names a usable stream target.
@@ -178,6 +189,13 @@ class FargvInputStream(FargvStream):
             name, short_name, description,
         )
 
+    def __repr__(self) -> str:
+        args = []
+        if self.original_path != "stdin":
+            args.append(self._STREAM_REPR.get(self.original_path, repr(self.original_path)))
+        args.extend(self._base_repr_kwargs())
+        return f"FargvInputStream({', '.join(args)})"
+
 
 class FargvOutputStream(FargvStream):
     """Text output stream; defaults to ``sys.stdout``.
@@ -202,3 +220,10 @@ class FargvOutputStream(FargvStream):
             sys.stdout if default is None else default,
             name, short_name, description,
         )
+
+    def __repr__(self) -> str:
+        args = []
+        if self.original_path != "stdout":
+            args.append(self._STREAM_REPR.get(self.original_path, repr(self.original_path)))
+        args.extend(self._base_repr_kwargs())
+        return f"FargvOutputStream({', '.join(args)})"

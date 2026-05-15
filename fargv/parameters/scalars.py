@@ -68,6 +68,14 @@ class FargvInt(FargvParameter):
                 return list(values)
         return super().ingest_value_strings(*values)
 
+    def __repr__(self) -> str:
+        default = self._default
+        args = [repr(default)]
+        if self.is_count_switch:
+            args.append("is_count_switch=True")
+        args.extend(self._base_repr_kwargs())
+        return f"{type(self).__name__}({', '.join(args)})"
+
     def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string, appending a count-switch note when relevant."""
         base = super().docstring(colored=colored, verbosity=verbosity)
@@ -208,6 +216,9 @@ class FargvBoolHelp(FargvBool):
         super().__init__(default=False, name="help", short_name="h",
                          description="Show this help message and exit")
         self._param_parser = param_parser
+
+    def __repr__(self) -> str:
+        return "FargvBoolHelp(None)"
 
     @property
     def exit_if_true(self) -> bool:

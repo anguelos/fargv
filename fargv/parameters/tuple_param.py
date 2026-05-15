@@ -150,6 +150,16 @@ class FargvTuple(FargvParameter):
         self._value = self._parse_string(str(val))
         return self._value
 
+    def __repr__(self) -> str:
+        inner = ", ".join(t.__name__ for t in self._element_types)
+        # Single-element tuple needs a trailing comma to stay a tuple literal
+        elem_repr = f"({inner},)" if len(self._element_types) == 1 else f"({inner})"
+        args = [elem_repr, repr(self._default)]
+        if self._optional:
+            args.append("optional=True")
+        args.extend(self._base_repr_kwargs())
+        return f"FargvTuple({', '.join(args)})"
+
     def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string including element types and optional flag."""
         from ..ansi import dim, is_colored

@@ -64,6 +64,13 @@ class FargvSubcommand(FargvParameter):
         self._selected_name: Optional[str] = self._default_sub
         self._sub_result: dict = {}
 
+    def __repr__(self) -> str:
+        args = [repr(self._definitions)]
+        if self._mandatory:
+            args.append("mandatory=True")
+        args.extend(self._base_repr_kwargs())
+        return f"FargvSubcommand({', '.join(args)})"
+
     @classmethod
     def _get_class_type(cls) -> type:
         return dict
@@ -133,7 +140,7 @@ class FargvSubcommand(FargvParameter):
             sp.name = sub_name
             if "help" not in sp._name2parameters:
                 sp._add_parameter(FargvHelp(sp))
-            sp.infer_short_names()
+            sp.infer_short_names(parent_taken=getattr(self, '_parent_taken', None))
             self._sub_parsers[sub_name] = sp
 
     def parse_subcommand(self, sub_name: str, sub_tokens, long_prefix: str, short_prefix: str) -> dict:
@@ -175,7 +182,9 @@ class FargvSubcommand(FargvParameter):
         # Expand each subcommand's parameters below the header
         self._ensure_sub_parsers()
         sub_lines = []
-        for sub_name, sp in self._sub_parsers.items():
+        for i, (sub_name, sp) in enumerate(self._sub_parsers.items()):
+            if i > 0:
+                sub_lines.append(dim("    ···", colored=c))
             sub_lines.append(f"    {bold(sub_name + ':', colored=c)}")
             params = [p for p in sp._name2parameters.values()
                       if not getattr(p, 'filter_out', False)]

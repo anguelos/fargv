@@ -36,6 +36,8 @@ import sys
 from .version import __version__
 from .fargv_legacy import fargv
 from .parse import parse, parse_and_launch, parse_here
+from deep_dataclasses import deep_dataclass, auxiliary, to_json_schema
+from .fargv_dataclass import FargvDataclass
 from .namespace import FargvNamespace, FargvBackend, FargvConfigBackend, FargvTkBackend
 from .parameters import (
     FargvError, FargvParameter, REQUIRED,
@@ -49,6 +51,16 @@ from .parameters import (
 )
 from .parser import ArgumentParser
 
+
+@deep_dataclass
+class FargvAutoConfig:
+    verbosity: int        = FargvVerbosity()
+    config: str           = FargvConfig()
+    help: bool            = FargvHelp()
+    bash_autocomplete: bool = FargvBashAutocomplete()
+    user_interface: str   = FargvUserInterface()
+
+
 __all__ = [
     "fargv", "parse", "parse_and_launch", "parse_here",
     "FargvError", "FargvParameter", "REQUIRED",
@@ -61,5 +73,9 @@ __all__ = [
     "FargvPath", "FargvExistingFile", "FargvNonExistingFile", "FargvFile",
     "FargvTuple", "FargvSubcommand",
     "ArgumentParser",
+    "deep_dataclass", "DictCoercible",
+    "FargvAutoConfig",
+    "FargvDataclass",
     "__version__",
+    "auxiliary", "to_json_schema",
 ]

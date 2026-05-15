@@ -39,6 +39,13 @@ class FargvChoice(FargvParameter):
     def _get_class_type(cls) -> type:
         return str
 
+    def __repr__(self) -> str:
+        args = [repr(self._choices)]
+        if self._default != self._choices[0]:
+            args.append(f"default={self._default!r}")
+        args.extend(self._base_repr_kwargs())
+        return f"{type(self).__name__}({', '.join(args)})"
+
     def docstring(self, colored=None, verbosity=None) -> str:
         """Return a one-line help string that includes the allowed choices."""
         base = super().docstring(colored=colored, verbosity=verbosity)
