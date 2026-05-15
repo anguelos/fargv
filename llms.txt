@@ -488,16 +488,13 @@ import fargv
 
 @deep_dataclass
 class MyAppSuite:
-    @auxiliary
-    @deep_dataclass
+    @auxiliary          # suppresses auto-instantiation — not a CLI entry point
     class CommonParams:
         log_level: str = "INFO"
 
-    @deep_dataclass
-    class Ingest(CommonParams):
+    class Ingest(CommonParams):   # inner classes are deep_dataclasses automatically
         source_dir: str = "/data/raw"
 
-    @deep_dataclass
     class Export(CommonParams):
         out_dir: str = "/data/out"
         fmt:     str = "parquet"
@@ -508,6 +505,9 @@ cfg, _ = fargv.parse(MyAppSuite.Ingest, suite_root=MyAppSuite)
 # export.py
 cfg, _ = fargv.parse(MyAppSuite.Export, suite_root=MyAppSuite)
 ```
+
+**`@deep_dataclass` inner classes**: automatically become deep dataclasses — no extra decorator needed.
+**`@auxiliary`**: suppresses auto-instantiation for an inner class. Use it whenever the inner class should NOT become a CLI entry point — shared base classes, list-element prototypes, types reused across multiple fields, etc. Non-auxiliary inner classes are the real entry points.
 
 **Shared config file**: `~/.{SuiteClassName}.json` — e.g. `~/.MyAppSuite.json`.
 

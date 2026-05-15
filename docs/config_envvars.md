@@ -247,8 +247,11 @@ to **one config file**.
 ### Design
 
 Define a `@deep_dataclass` whose inner classes are the individual tools.
-Shared parameters live in `@auxiliary` base classes; each tool inherits from
-one or more of them:
+Every inner class is automatically a deep dataclass — no extra decorator
+needed.  Use `@auxiliary` on any inner class you do **not** want automatically
+instantiated: shared base classes, list-element prototypes, types used for
+multiple fields, or any other supporting class.  Non-auxiliary inner classes
+are the real CLI entry points.
 
 ```python
 from deep_dataclasses import deep_dataclass, auxiliary
@@ -258,22 +261,18 @@ import fargv
 class DdpMsConfigs:
     """Suite of microservice CLI tools."""
 
-    @auxiliary
-    @deep_dataclass
+    @auxiliary          # suppresses auto-instantiation — not a CLI entry point
     class GlobalConfig:
         log_level: str = "INFO"
         "Logging level shared by all services."
 
-    @deep_dataclass
-    class Microservice(GlobalConfig):
+    class Microservice(GlobalConfig):   # inner classes are deep_dataclasses automatically
         host: str = "localhost"
         port: int = 8080
 
-    @deep_dataclass
     class MsStatic(Microservice):
         static_dir: str = "/var/static"
 
-    @deep_dataclass
     class MsDetection(Microservice):
         model_path: str = "/models/det.pt"
         threshold:  float = 0.5
